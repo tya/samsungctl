@@ -1,5 +1,13 @@
 """Remote control Samsung televisions via TCP/IP connection"""
 
+
+import logging
+from logging import NullHandler
+
+logger = logging.getLogger('samsungctl')
+logger.addHandler(NullHandler())
+logging.basicConfig(format="%(message)s", level=logging.NOTSET)
+
 from .remote import Remote
 
 __title__ = "samsungctl"

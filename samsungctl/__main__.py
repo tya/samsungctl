@@ -1,10 +1,8 @@
 import argparse
-import collections
-import json
-import logging
-import os
 import socket
-import errno
+
+import sys
+import os
 
 from . import __doc__ as doc
 from . import __title__ as title
@@ -13,52 +11,14 @@ from . import exceptions
 from . import Remote
 
 
-def _read_config():
-    config = collections.defaultdict(lambda: None, {
-        "name": "samsungctl",
-        "description": "PC",
-        "id": "",
-        "method": "legacy",
-        "timeout": 0,
-    })
 
-    file_loaded = False
-    directories = []
 
-    xdg_config = os.getenv("XDG_CONFIG_HOME")
-    if xdg_config:
-        directories.append(xdg_config)
+import logging
+from logging import NullHandler
 
-    directories.append(os.path.join(os.getenv("HOME"), ".config"))
-    directories.append("/etc")
-
-    for directory in directories:
-        path = os.path.join(directory, "samsungctl.conf")
-        try:
-            config_file = open(path)
-        except IOError as e:
-            if e.errno == errno.ENOENT:
-                continue
-            else:
-                raise
-        else:
-            file_loaded = True
-            break
-
-    if not file_loaded:
-        return config
-
-    with config_file:
-        try:
-            config_json = json.load(config_file)
-        except ValueError as e:
-            messsage = "Warning: Could not parse the configuration file.\n  %s"
-            logging.warning(message, e)
-            return config
-
-        config.update(config_json)
-
-    return config
+logger = logging.getLogger('samsungctl')
+logger.addHandler(NullHandler())
+logging.basicConfig(format="%(message)s", level=logging.NOTSET)
 
 
 def main():
@@ -97,17 +57,11 @@ def main():
     else:
         log_level = logging.DEBUG
 
-    logging.basicConfig(format="%(message)s", level=log_level)
-
-    config = _read_config()
+    config = {}
     config.update({k: v for k, v in vars(args).items() if v is not None})
 
-    if not config["host"]:
-        logging.error("Error: --host must be set")
-        return
-
     try:
-        with Remote(config) as remote:
+        with Remote(log_level=log_level, **config) as remote:
             for key in args.key:
                 remote.control(key)
 
