@@ -121,18 +121,20 @@ class Method(object):
         self.control_url = control_url
 
         self.__name__ = node.find(service_xmlns('name')).text
-        arguments = node.find(service_xmlns('argumentList')) or []
 
-        for argument in arguments:
-            name = argument.find(service_xmlns('name')).text
-            direction = argument.find(service_xmlns('direction')).text
-            variable = argument.find(service_xmlns('relatedStateVariable')).text
-            variable = variables[variable]
+        for arguments in node:
+            if arguments.tag != service_xmlns('argumentList'):
+                continue
+            for argument in arguments:
+                name = argument.find(service_xmlns('name')).text
+                direction = argument.find(service_xmlns('direction')).text
+                variable = argument.find(service_xmlns('relatedStateVariable')).text
+                variable = variables[variable]
 
-            if direction == 'in':
-                self.params += [dict(name=name, variable=variable)]
-            else:
-                self.ret_vals += [dict(name=name, variable=variable)]
+                if direction == 'in':
+                    self.params += [dict(name=name, variable=variable)]
+                else:
+                    self.ret_vals += [dict(name=name, variable=variable)]
 
     def __call__(self, *args, **kwargs):
         for i, arg in enumerate(args):
@@ -726,16 +728,28 @@ class UPNPTV(object):
         self.media_renderer.color_temperature = value
 
     @property
+    def media_info(self):
+        return self.media_renderer.media_info
+
+    @property
+    def transport_info(self):
+        return self.media_renderer.transport_info
+
+    @property
+    def transport_actions(self):
+        return self.media_renderer.transport_actions
+
+    @property
     def position_info(self):
         return self.media_renderer.position_info
 
     @property
-    def channel_list(self):
-        return self.main_tv_server.channel_list
+    def channels(self):
+        return self.main_tv_server.channels
 
     @property
-    def source_list(self):
-        return self.main_tv_server.source_list
+    def sources(self):
+        return self.main_tv_server.sources
 
     @property
     def source(self):

@@ -36,7 +36,7 @@ class MainTVServer(UPNPControlBase):
         return self.main_tv_agent.GetBannerInformation()[1]
 
     @property
-    def channel_list(self):
+    def channels(self):
         (
             version,
             supported_channels,
@@ -203,7 +203,7 @@ class MainTVServer(UPNPControlBase):
         return self.main_tv_agent.DeleteRecordedItem(uid)[0]
 
     @property
-    def source_list(self):
+    def sources(self):
         source_list = self.main_tv_agent.GetSourceList()[1]
         source_list = saxutils.unescape(source_list)
         root = ElementTree.fromstring(source_list)
@@ -229,7 +229,7 @@ class MainTVServer(UPNPControlBase):
     @property
     def source(self):
         source_id = self.main_tv_agent.GetCurrentExternalSource()[2]
-        for source in self.source_list:
+        for source in self.sources:
             if source.id == int(source_id):
                 return source
 
@@ -237,7 +237,7 @@ class MainTVServer(UPNPControlBase):
     def source(self, source):
         if isinstance(source, int):
             source_id = source
-            for source in self.source_list:
+            for source in self.sources:
                 if source.id == source_id:
                     break
             else:
@@ -245,7 +245,7 @@ class MainTVServer(UPNPControlBase):
 
         elif not isinstance(source, Source):
             source_name = source
-            for source in self.source_list:
+            for source in self.sources:
                 if source_name in (
                     source.name,
                     source.label,
@@ -274,7 +274,7 @@ class MainTVServer(UPNPControlBase):
     def edit_source_name(self, source, name):
         if isinstance(source, int):
             source_id = source
-            for source in self.source_list:
+            for source in self.sources:
                 if source.id == source_id:
                     break
             else:
@@ -282,7 +282,7 @@ class MainTVServer(UPNPControlBase):
 
         elif not isinstance(source, Source):
             source_name = source
-            for source in self.source_list:
+            for source in self.sources:
                 if source_name in (
                     source.name,
                     source.label,

@@ -21,52 +21,39 @@ class MediaRenderer(UPNPControlBase):
         return output
 
     @property
-    def track_count(self):
-        return self.av_transport.GetMediaInfo(0)[0]
+    def media_info(self):
+        (
+            track_count,
+            media_duration,
+            media_uri,
+            media_metadata,
+            next_uri,
+            next_metadata,
+            playback_device,
+            record_device,
+            write_status
+        ) = self.av_transport.GetMediaInfo(0)
+
+        return dict(
+            track_count=track_count,
+            media_duration=media_duration,
+            media_uri=media_uri,
+            media_metadata=media_metadata,
+            next_uri=next_uri,
+            next_metadata=next_metadata,
+            playback_device=playback_device,
+            record_device=record_device,
+            write_status=write_status
+        )
 
     @property
-    def media_duration(self):
-        return self.av_transport.GetMediaInfo(0)[1]
-
-    @property
-    def media_uri(self):
-        return self.av_transport.GetMediaInfo(0)[2]
-
-    @property
-    def media_metadata(self):
-        return self.av_transport.GetMediaInfo(0)[3]
-
-    @property
-    def next_uri(self):
-        return self.av_transport.GetMediaInfo(0)[4]
-
-    @property
-    def next_metadata(self):
-        return self.av_transport.GetMediaInfo(0)[5]
-
-    @property
-    def playback_device(self):
-        return self.av_transport.GetMediaInfo(0)[6]
-
-    @property
-    def record_device(self):
-        return self.av_transport.GetMediaInfo(0)[7]
-
-    @property
-    def write_status(self):
-        return self.av_transport.GetMediaInfo(0)[8]
-
-    @property
-    def state(self):
-        return self.av_transport.GetTransportInfo(0)[0]
-
-    @property
-    def status(self):
-        return self.av_transport.GetTransportInfo(0)[1]
-
-    @property
-    def speed(self):
-        return self.av_transport.GetTransportInfo(0)[2]
+    def transport_info(self):
+        state, status, speed =  self.av_transport.GetTransportInfo(0)
+        return dict(
+            state=state,
+            status=status,
+            speed=speed
+        )
 
     @property
     def device_capabilities(self):
