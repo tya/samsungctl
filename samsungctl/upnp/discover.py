@@ -105,10 +105,7 @@ if sys.platform.startswith('win'):
             ctypes.byref(buf_len))
 
         if rc == ERROR_BUFFER_OVERFLOW:
-            adapter_list = (
-                IP_ADAPTER_INFO * (
-                buf_len.value / ctypes.sizeof(IP_ADAPTER_INFO))
-            )()
+            adapter_list = (IP_ADAPTER_INFO * ctypes.sizeof(IP_ADAPTER_INFO))()
 
             buf_len = ULONG(ctypes.sizeof(adapter_list))
             rc = GetAdaptersInfo(
@@ -297,7 +294,7 @@ def discover(timeout=5):
         )
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 3)
-        sock.bind(local_address)
+        sock.bind((local_address, 0))
         sock.settimeout(3.0)
 
         def send_discover(found_st=b''):
