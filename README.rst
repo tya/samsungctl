@@ -9,8 +9,10 @@ well most of the modern Tizen-OS TVs with Ethernet or Wi-Fi connectivity.
 Dependencies
 ============
 
-- Python 3
-- ``websocket-client`` (optional, for 2016+ TVs)
+- ``websocket-client``
+- ``six``
+- ``requests``
+- ``ifaddr``
 - ``curses`` (optional, for the interactive mode)
 
 Installation
@@ -143,8 +145,6 @@ Example program
 This simple program opens and closes the menu a few times.
 
 .. code-block:: python
-
-    #!/usr/bin/env python3
 
     import samsungctl
     import time

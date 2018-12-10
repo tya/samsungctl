@@ -18,12 +18,16 @@
 
 import time
 import logging
+import sys
 logging.disable(logging.DEBUG)
 logging.disable(logging.WARNING)
 logging.disable(logging.INFO)
 
 
-answer = input(
+if sys.version_info[0] >= 3:
+    raw_input = input
+
+answer = raw_input(
     'This example is going to change some of the settings on your TV. '
     'It should change them back to what they were before hand. \n'
     'But seeing how how this is still in a test phase. It could stop running '
@@ -32,18 +36,17 @@ answer = input(
 )
 
 if not answer.lower().startswith('y'):
-    import sys
     sys.exit(0)
 
 
-from samsungctl import remote
+from . import remote
 
 for tv in remote.discover(5):
     break
 else:
     raise RuntimeError('TV not found')
 
-
+tv.open()
 volume = tv.volume
 
 print('volume:', volume)

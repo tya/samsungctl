@@ -109,6 +109,8 @@ class RemoteWebsocket(WebSocketApp):
         self._send_lock = threading.Lock()
         self._socket = None
         self._run_thread = None
+
+    def open(self):
         self.run_forever()
 
     @property
@@ -199,6 +201,7 @@ class RemoteWebsocket(WebSocketApp):
                 raise RuntimeError('Websocket Authentication Error')
 
     def __enter__(self):
+        self.open()
         return self
 
     def __exit__(self, type, value, traceback):

@@ -1,573 +1,22 @@
 # -*- coding: utf-8 -*-
 import requests
-from xml.dom.minidom import Document
-from xml.etree import cElementTree as ElementTree
+import six
+from xml.sax import saxutils
+from lxml import etree
+from .UPNP_Device.upnp_class import UPNPObject
+from .UPNP_Device.instance_singleton import InstanceSingleton
+from .UPNP_Device.discover import discover as _discover
+from .UPNP_Device.xmlns import strip_xmlns
 
-SEC_XMLNS = '{http://www.sec.co.kr/dlna}'
-DEVICE_XMLNS = '{urn:schemas-upnp-org:device-1-0}'
-ENVELOPE_XMLNS = 'http://schemas.xmlsoap.org/soap/envelope/'
-SERVICE_XMLNS = '{urn:schemas-upnp-org:service-1-0}'
-DLNA_XMLNS = '{urn:schemas-dlna-org:device-1-0}'
-PNPX_XMLNS = '{http://schemas.microsoft.com/windows/pnpx/2005/11}'
-DF_XMLNS = '{http://schemas.microsoft.com/windows/2008/09/devicefoundation}'
 
+class UPNPTV(UPNPObject):
 
-def response_xmlns(service, tag):
-    return '{' + service + '}' + tag
+    def __init__(self, ip, locations):
+        self._dtv_information = None
 
-
-def envelope_xmlns(tag):
-    return '{' + ENVELOPE_XMLNS + '}' + tag
-
-
-def service_xmlns(tag):
-    return SERVICE_XMLNS + tag
-
-
-def sec_xmlns(tag):
-    return SEC_XMLNS + tag
-
-
-def device_xmlns(tag):
-    return DEVICE_XMLNS + tag
-
-
-def dlna_xmlns(tag):
-    return DLNA_XMLNS + tag
-
-
-def pnpx_xmlns(tag):
-    return PNPX_XMLNS + tag
-
-
-def df_xmlns(tag):
-    return DF_XMLNS + tag
-
-
-class Icon(object):
-
-    def __init__(self, url, node):
-        self.mime_type = None
-        self.width = None
-        self.height = None
-        self.depth = None
-        self.url = None
-
-        for item in node:
-            tag = item.tag.replace(DEVICE_XMLNS, '')
-            try:
-                text = int(item.text)
-            except ValueError:
-                text = item.text
-            if tag == 'url':
-                name = text.split('\\')[-1].replace('.', '_')
-                self.__name__ = name[0].upper() + name[1:]
-                text = url + text.encode('utf-8')
-
-            setattr(self, tag, text)
-
-    @property
-    def data(self):
-        return requests.get(self.url).content
-
-
-class Service(object):
-
-    def __init__(self, url, location, service, control_url):
-        self.variables = {}
-        self.methods = {}
-
-        response = requests.get(url + location)
-        root = ElementTree.fromstring(response.content)
-
-        methods = root.find(service_xmlns('actionList')) or []
-        variables = root.find(service_xmlns('serviceStateTable')) or []
-        for variable in variables:
-            variable = Variable(variable)
-            self.variables[variable.__name__] = variable
-
-        for method in methods:
-            method = Method(
-                method,
-                self.variables,
-                service,
-                url + control_url.encode('utf-8')
-            )
-            self.methods[method.__name__] = method
-
-    def __getattr__(self, item):
-        if item in self.__dict__:
-            return self.__dict__[item]
-
-        if item in self.methods:
-            return self.methods[item]
-
-        raise AttributeError(item)
-
-    def __str__(self):
-        output = ''
-        for method in self.methods.values():
-            output += str(method) + '\n'
-
-        return output
-
-
-class Method(object):
-
-    def __init__(self, node, variables, service, control_url):
-        self.params = []
-        self.ret_vals = []
-        self.service = service
-        self.control_url = control_url
-
-        self.__name__ = node.find(service_xmlns('name')).text
-
-        for arguments in node:
-            if arguments.tag != service_xmlns('argumentList'):
-                continue
-            for argument in arguments:
-                name = argument.find(service_xmlns('name')).text
-                direction = argument.find(service_xmlns('direction')).text
-                variable = argument.find(service_xmlns('relatedStateVariable')).text
-                variable = variables[variable]
-
-                if direction == 'in':
-                    self.params += [dict(name=name, variable=variable)]
-                else:
-                    self.ret_vals += [dict(name=name, variable=variable)]
-
-    def __call__(self, *args, **kwargs):
-        for i, arg in enumerate(args):
-            try:
-                kwargs[self.params[i]['name']] = arg
-            except IndexError:
-                for param in self.params:
-                    print(param['name'])
-
-                raise
-
-        doc = Document()
-
-        envelope = doc.createElementNS('', 's:Envelope')
-        envelope.setAttribute(
-            'xmlns:s',
-            ENVELOPE_XMLNS
-        )
-        envelope.setAttribute(
-            's:encodingStyle',
-            'http://schemas.xmlsoap.org/soap/encoding/'
-        )
-
-        body = doc.createElementNS('', 's:Body')
-
-        fn = doc.createElementNS('', self.__name__)
-        fn.setAttribute('xmlns:u', self.service)
-
-        for param in self.params:
-            if param['name'] not in kwargs:
-                value = param['variable'](None)
-            else:
-                value = param['variable'](kwargs[param['name']])
-
-            tmp_node = doc.createElement(param['name'])
-            tmp_text_node = doc.createTextNode(str(value))
-            tmp_node.appendChild(tmp_text_node)
-            fn.appendChild(tmp_node)
-
-        body.appendChild(fn)
-        envelope.appendChild(body)
-        doc.appendChild(envelope)
-        pure_xml = doc.toxml()
-
-        header = {
-            'SOAPAction':   '"{service}#{method}"'.format(
-                service=self.service,
-                method=self.__name__
-            ),
-            'Content-Type': 'text/xml'
-        }
-
-        response = requests.post(
-            self.control_url,
-            data=pure_xml,
-            headers=header
-        )
-
-        envelope = ElementTree.fromstring(response.content)
-        body = envelope.find(envelope_xmlns('Body'))
-
-        return_value = []
-
-        if body is not None:
-
-            response = body.find(
-                response_xmlns(self.service, self.__name__ + 'Response')
-            )
-            if response is not None:
-                for ret_val in self.ret_vals:
-                    value = response.find(ret_val['name'])
-                    if value is None:
-                        value = ret_val['variable'].convert(None)
-                    else:
-                        value = ret_val['variable'].convert(value.text)
-
-                    return_value += [value]
-
-        if not return_value and self.ret_vals:
-            for val in self.ret_vals:
-                value = val['variable'].convert(None)
-                return_value += [value]
-
-        return return_value
-
-    def __str__(self):
-        output = [
-            '',
-            'Method Name: ' + self.__name__,
-            '  Parameters:'
-        ]
-        for param in self.params:
-            output += [
-                '    ' + param['name']
-            ]
-            param['variable'].direction = 'in'
-            variable = str(param['variable']).split('\n')
-            variable = list('    ' + line for line in variable)
-            output += variable
-
-        output += [
-            '  Return Values:'
-        ]
-        for val in self.ret_vals:
-
-            output += [
-                '    ' + val['name']
-            ]
-
-            val['variable'].direction = 'out'
-
-            variable = str(val['variable']).split('\n')
-            variable = list('    ' + line for line in variable)
-            output += variable
-
-        return '\n'.join(output)
-
-
-class Variable(object):
-
-    def __init__(self, node):
-        self.minimum = None
-        self.maximum = None
-        self.step = None
-        self.allowed_values = None
-        self.default_value = None
-        self.direction = 'in'
-
-        self.__name__ = node.find(service_xmlns('name')).text
-
-        data_type = node.find(service_xmlns('dataType')).text
-        if data_type.startswith('ui') or data_type.startswith('i'):
-            data_type = int
-            allowed = node.find(service_xmlns('allowedValueRange'))
-            if allowed is not None:
-                minimum = allowed.find(service_xmlns('minimum'))
-                maximum = allowed.find(service_xmlns('maximum'))
-                step = allowed.find(service_xmlns('step'))
-
-                if minimum is not None:
-                    self.minimum = int(minimum.text)
-                if maximum is not None:
-                    self.maximum = int(maximum.text)
-                if step is not None:
-                    self.step = int(step.text)
-
-        elif data_type == 'string':
-            data_type = str
-            allowed = node.find(service_xmlns('allowedValueList'))
-            if allowed is not None:
-                self.allowed_values = list(value.text for value in allowed)
-
-        elif data_type == 'boolean':
-            data_type = bool
-
-        else:
-            raise RuntimeError(data_type)
-
-        default_value = node.find(service_xmlns('defaultValue'))
-        if default_value is not None:
-            if default_value.text == 'NOT_IMPLEMENTED':
-                self.default_value = 'NOT_IMPLEMENTED'
-            else:
-                self.default_value = data_type(default_value.text)
-
-        self.data_type = data_type
-
-    def __call__(self, value):
-        if not isinstance(value, self.data_type):
-            raise TypeError('Incorrect data type')
-
-        if value is None:
-            if self.default_value is None:
-                raise ValueError('A value must be supplied')
-            if self.default_value == 'NOT_IMPLEMENTED':
-                raise ValueError('Not Implemented')
-            value = self.default_value
-
-        if self.data_type == int:
-            if self.minimum is not None and value < self.minimum:
-                raise ValueError(
-                    'Value {0} is lower then the minimum of {1}'.format(
-                        value,
-                        self.minimum
-                    )
-                )
-
-            if self.maximum is not None and value > self.maximum:
-                raise ValueError(
-                    'Value {0} is higher then the maximum of {1}'.format(
-                        value,
-                        self.maximum
-                    )
-                )
-
-        elif self.data_type == str:
-            if (
-                self.allowed_values is not None and
-                value not in self.allowed_values
-            ):
-                raise ValueError(
-                    'Value {0} not allowed. allowed values are \n{1}'.format(
-                        value,
-                        self.allowed_values
-                    )
-                )
-
-        elif self.data_type == bool:
-            if value not in (0, 1, True, False):
-                raise ValueError(
-                    'Boolean value only allowed (0, 1, True, False)'
-                )
-            value = bool(value)
-
-        return value
-
-    def convert(self, value):
-        if not value:
-            if self.default_value is not None:
-                return self.default_value
-        else:
-            if self.data_type == bool:
-                if value == 'Yes':
-                    return True
-                if value == 'No':
-                    return False
-                if value.isdigit():
-                    return bool(int(value))
-                return bool(value)
-
-            try:
-                return self.data_type(value)
-            except ValueError:
-                return value
-
-    def __str__(self):
-        output = [
-            '    Data Type Name: ' + self.__name__,
-            '    Data Type: ' + str(self.data_type)
-        ]
-
-        if self.default_value is not None:
-            output += [
-                '    Default: ' + repr(self.default_value)
-            ]
-        if self.minimum is not None:
-            output += [
-                '    Minimum: ' + str(self.minimum)
-            ]
-        if self.maximum is not None:
-            output += [
-                '    Maximum: ' + str(self.maximum)
-            ]
-        if self.step is not None:
-            output += [
-                '    Step: ' + str(self.step)
-            ]
-        if self.allowed_values is not None:
-
-            if self.direction == 'in':
-                output += ['    Allowed values:']
-            else:
-                output += ['    Possible returned values:']
-            for item in self.allowed_values:
-                output += ['        ' + repr(item)]
-
-        return '\n'.join(output) + '\n'
-
-
-class UPNPControlBase(object):
-
-    def __init__(self, url, location):
-        response = requests.get(url + location)
-        root = ElementTree.fromstring(response.content)
-
-        device = root.find(device_xmlns('device'))
-        icons = device.find(device_xmlns('iconList')) or []
-        services = device.find(device_xmlns('serviceList')) or []
-
-        self._device = device
-
-        self.icon_sml_jpg = None
-        self.icon_lrg_jpg = None
-        self.icon_sml_png = None
-        self.icon_lrg_png = None
-
-        for icon in icons:
-            icon = Icon(url, icon)
-            setattr(self, icon.__name__.lower(), icon)
-
-        for service in services:
-            scpdurl = service.find(device_xmlns('SCPDURL')).text
-            control_url = service.find(device_xmlns('controlURL')).text
-            service_id = service.find(device_xmlns('serviceId')).text
-            service_type = service.find(device_xmlns('serviceType')).text
-            scpdurl = b'/' + location[1:].split(b'/')[0] + b'/' + scpdurl.encode('utf-8')
-
-            service = Service(url, scpdurl, service_type, control_url)
-            name = service_id.split(':')[-1]
-            service.__name__ = name
-            attr_name = ''
-            last_char = ''
-
-            for char in list(name):
-                if char.isdigit():
-                    continue
-
-                if char.isupper():
-                    if attr_name and not last_char.isupper():
-                        attr_name += '_'
-
-                if last_char.isupper():
-                    last_char = ''
-                else:
-                    last_char = char
-                attr_name += char.lower()
-
-            setattr(self, attr_name, service)
-
-    def _get_xml_text(self, tag):
-        value = self._device.find(device_xmlns(tag))
-        if value is not None:
-            value = value.text
-
-        return value
-
-    @property
-    def device_type(self):
-        return self._get_xml_text('deviceType')
-
-    @property
-    def friendly_name(self):
-        return self._get_xml_text('friendlyName')
-
-    @property
-    def manufacturer(self):
-        return self._get_xml_text('manufacturer')
-
-    @property
-    def manufacturer_url(self):
-        return self._get_xml_text('manufacturerURL')
-
-    @property
-    def model_description(self):
-        return self._get_xml_text('modelDescription')
-
-    @property
-    def model_name(self):
-        return self._get_xml_text('modelName')
-
-    @property
-    def model_number(self):
-        return self._get_xml_text('modelNumber')
-
-    @property
-    def model_url(self):
-        return self._get_xml_text('modelURL')
-
-    @property
-    def serial_number(self):
-        return self._get_xml_text('serialNumber')
-
-    @property
-    def udn(self):
-        return self._get_xml_text('UDN')
-
-    @property
-    def upc(self):
-        return self._get_xml_text('UPC')
-
-    @property
-    def device_id(self):
-        value = self._device.find(sec_xmlns('deviceID'))
-        if value is not None:
-            value = value.text
-
-        return value
-
-    @property
-    def x_compatible_id(self):
-        value = self._device.find(pnpx_xmlns('X_compatibleId'))
-        if value is not None:
-            value = value.text
-
-        return value
-
-    @property
-    def x_device_category(self):
-        value = self._device.find(df_xmlns('X_deviceCategory'))
-        if value is not None:
-            value = value.text
-
-        return value
-
-    @property
-    def x_dlnadoc(self):
-        value = self._device.find(dlna_xmlns('X_DLNADOC'))
-        if value is not None:
-            value = value.text
-
-        return value
-
-
-from samsungctl.upnp.media_renderer import MediaRenderer # NOQA
-from samsungctl.upnp.main_tv_server import MainTVServer # NOQA
-from samsungctl.upnp.remote_receiver import RemoteReceiver # NOQA
-from samsungctl.remote_legacy import RemoteLegacy
-from samsungctl.remote_websocket import RemoteWebsocket
-
-
-class UPNPTV(object):
-
-    def __init__(
-        self,
-        ip,
-        main_tv_server_loc,
-        media_renderer_loc,
-        remote_receiver_loc
-    ):
+        UPNPObject.__init__(self, ip, locations)
         self.ip_address = ip
-        url_template = b'http://'
-
-        url = url_template + (
-            main_tv_server_loc.replace(b'http://', b'').split(b'/')[0]
-        )
-        main_tv_server_loc = main_tv_server_loc.replace(url, b'')
-        media_renderer_loc = media_renderer_loc.replace(url, b'')
-        remote_receiver_loc = remote_receiver_loc.replace(url, b'')
-
-        self.main_tv_server = MainTVServer(url, main_tv_server_loc)
-        self.media_renderer = MediaRenderer(url, media_renderer_loc)
-        self.remote_receiver = RemoteReceiver(url, remote_receiver_loc)
-
+        self.power = True
         url = 'http://{0}:8001/api/v2'.format(ip)
 
         try:
@@ -580,26 +29,784 @@ class UPNPTV(object):
         except:
             self._tv_options = {}
 
-        if self.year <= 2014:
-            self.remote = RemoteLegacy(ip, self.device_id)
+        self.name = self.__name__
+
+    def send_key_code(self, key_code, key_description):
+        try:
+            self.TestRCRService.SendKeyCode(key_code, key_description)
+        except AttributeError:
+            self.MultiScreenService.SendKeyCode(key_code, key_description)
+
+    def set_break_aux_stream_playlist(
+        self,
+        break_splice_out_position,
+        expiration_time,
+        aux_stream_playlist,
+        break_id=0
+    ):
+        self.StreamSplicing.SetBreakAuxStreamPlaylist(
+            break_id,
+            break_splice_out_position,
+            expiration_time,
+            aux_stream_playlist
+        )
+
+    def set_break_aux_stream_trigger(
+        self,
+        break_id=0,
+        break_trigger_high=0,
+        break_trigger_low=0
+    ):
+        self.StreamSplicing.SetBreakAuxStreamTrigger(
+            break_id,
+            break_trigger_high,
+            break_trigger_low
+        )
+
+    @property
+    def current_transport_actions(self):
+        actions = self.AVTransport.GetCurrentTransportActions(0)
+        return actions
+
+    @property
+    def device_capabilities(self):
+        play_media, rec_media, rec_quality_modes = (
+            self.AVTransport.GetDeviceCapabilities(0)
+        )
+
+        return play_media, rec_media, rec_quality_modes
+
+    @property
+    def media_info(self):
+        (
+            num_tracks,
+            media_duration,
+            current_uri,
+            current_uri_metadata,
+            next_uri,
+            next_uri_metadata,
+            play_medium,
+            record_medium,
+            write_status
+        ) = self.AVTransport.GetMediaInfo(0)
+
+        return (
+            num_tracks,
+            media_duration,
+            current_uri,
+            current_uri_metadata,
+            next_uri,
+            next_uri_metadata,
+            play_medium,
+            record_medium,
+            write_status
+        )
+
+    @property
+    def position_info(self):
+        (
+            track,
+            track_duration,
+            track_metadata,
+            track_uri,
+            relative_time,
+            absolute_time,
+            relative_count,
+            absolute_count
+        ) = self.AVTransport.GetPositionInfo(0)
+
+        return (
+            track,
+            track_duration,
+            track_metadata,
+            track_uri,
+            relative_time,
+            absolute_time,
+            relative_count,
+            absolute_count
+        )
+
+    @property
+    def transport_info(self):
+        (
+            current_transport_state,
+            current_transport_status,
+            current_speed
+        ) = self.AVTransport.GetTransportInfo(0)
+        return (
+            current_transport_state,
+            current_transport_status,
+            current_speed
+        )
+
+    @property
+    def transport_settings(self):
+        play_mode, rec_quality_mode = self.AVTransport.GetTransportSettings(0)
+        return play_mode, rec_quality_mode
+
+    def next(self):
+        self.AVTransport.Next(0)
+
+    def pause(self):
+        self.AVTransport.Pause(0)
+
+    def play(self, speed='1'):
+        self.AVTransport.Play(0, speed)
+
+    def previous(self):
+        self.AVTransport.Previous(0)
+
+    def seek(self, target, unit='REL_TIME'):
+        self.AVTransport.Seek(0, unit, target)
+
+    def set_av_transport_uri(self, current_uri, current_uri_metadata):
+        self.AVTransport.SetAVTransportURI(0, current_uri, current_uri_metadata)
+
+    def set_next_av_transport_uri(self, next_uri, next_uri_metadata):
+        self.AVTransport.SetNextAVTransportURI(0, next_uri, next_uri_metadata)
+
+    @property
+    def play_mode(self):
+        return self.transport_settings[0]
+
+    @play_mode.setter
+    def play_mode(self, new_play_mode='NORMAL'):
+        self.AVTransport.SetPlayMode(0, new_play_mode)
+
+    def stop(self):
+        self.AVTransport.Stop(0)
+
+    @property
+    def byte_position_info(self):
+        (
+            track_size,
+            relative_byte,
+            absolute_byte
+        ) = self.AVTransport.X_DLNA_GetBytePositionInfo(0)
+
+        return track_size, relative_byte, absolute_byte
+
+    @property
+    def stopped_reason(self):
+        (
+            stopped_reason,
+            stopped_reason_data
+        ) = self.AVTransport.X_GetStoppedReason(0)
+
+        return stopped_reason, stopped_reason_data
+
+    def player_app_hint(self, upnp_class):
+        self.AVTransport.X_PlayerAppHint(0, upnp_class)
+
+    def prefetch_uri(self, prefetch_uri, prefetch_uri_meta_data):
+        self.AVTransport.X_PrefetchURI(0, prefetch_uri, prefetch_uri_meta_data)
+
+    def connection_complete(self, connection_id=0):
+        self.ConnectionManager.ConnectionComplete(connection_id)
+
+    @property
+    def current_connection_ids(self):
+        connection_ids = self.ConnectionManager.GetCurrentConnectionIDs()
+        return connection_ids
+
+    def current_connection_info(self, connection_id):
+        (
+            rcs_id,
+            av_transport_id,
+            protocol_info,
+            peer_connection_manager,
+            peer_connection_id,
+            direction,
+            status
+        ) = self.ConnectionManager.GetCurrentConnectionInfo(connection_id)
+
+        return (
+            rcs_id,
+            av_transport_id,
+            protocol_info,
+            peer_connection_manager,
+            peer_connection_id,
+            direction,
+            status
+        )
+
+    @property
+    def protocol_info(self):
+        source, sink = self.ConnectionManager.GetProtocolInfo()
+        return source, sink
+
+    def prepare_for_connection(
+        self,
+        remote_protocol_info,
+        peer_connection_manager,
+        direction,
+        peer_connection_id=0
+    ):
+        (
+            connection_id,
+            av_transport_id,
+            rcs_id
+        ) = self.ConnectionManager.PrepareForConnection(
+            remote_protocol_info,
+            peer_connection_manager,
+            peer_connection_id,
+            direction
+        )
+
+        return connection_id, av_transport_id, rcs_id
+
+    def get_channel_mute(self, channel):
+        current_mute = self.RenderingControl.GetMute(0, channel)
+        return current_mute
+
+    def set_channel_mute(self, channel, desired_mute):
+        self.RenderingControl.SetMute(0, channel, desired_mute)
+
+    def get_channel_volume(self, channel):
+        current_volume = self.RenderingControl.GetVolume(0, channel)
+        return current_volume
+
+    def set_channel_volume(self, channel, desired_volume):
+        self.RenderingControl.SetVolume(0, channel, desired_volume)
+
+    def list_presets(self):
+        current_preset_list = self.RenderingControl.ListPresets(0)
+        return current_preset_list
+
+    def select_preset(self, preset_name):
+        self.RenderingControl.SelectPreset(0, preset_name)
+
+    def control_caption(
+        self,
+        operation,
+        name,
+        resource_uri,
+        caption_uri,
+        caption_type,
+        language,
+        encoding
+    ):
+        self.RenderingControl.X_ControlCaption(
+            0,
+            operation,
+            name,
+            resource_uri,
+            caption_uri,
+            caption_type,
+            language,
+            encoding
+        )
+
+    @property
+    def caption_state(self):
+        captions, enabled_captions = self.RenderingControl.X_GetCaptionState(0)
+        return captions, enabled_captions
+
+    @property
+    def aspect_ratio(self):
+        aspect_ratio = self.RenderingControl.X_GetAspectRatio(0)
+        return aspect_ratio
+
+    @aspect_ratio.setter
+    def aspect_ratio(self, aspect_ratio='Default'):
+        self.RenderingControl.X_SetAspectRatio(0, aspect_ratio)
+
+    def get_audio_selection(self):
+        audio_pid, audio_encoding = self.RenderingControl.X_GetAudioSelection(0)
+        return audio_pid, audio_encoding
+
+    def set_audio_selection(self, audio_encoding, audio_pid=0):
+        self.RenderingControl.X_UpdateAudioSelection(
+            0,
+            audio_pid,
+            audio_encoding
+        )
+
+    @property
+    def service_capabilities(self):
+        service_capabilities = self.RenderingControl.X_GetServiceCapabilities(0)
+        return service_capabilities
+
+    def get_tv_slide_show(self):
+        (
+            current_show_state,
+            current_theme_id,
+            total_theme_number
+        ) = self.RenderingControl.X_GetTVSlideShow(0)
+
+        return current_show_state, current_theme_id, total_theme_number
+
+    def set_tv_slide_show(self, current_show_state, current_show_theme):
+        self.RenderingControl.X_SetTVSlideShow(
+            0,
+            current_show_state,
+            current_show_theme
+        )
+
+    def get_video_selection(self):
+        video_pid, video_encoding = self.RenderingControl.X_GetVideoSelection(0)
+        return video_pid, video_encoding
+
+    def set_video_selection(self, video_encoding, video_pid=0):
+        self.RenderingControl.X_UpdateVideoSelection(
+            0,
+            video_pid,
+            video_encoding
+        )
+
+    def move_360_view(self, latitude_offset=0.0, longitude_offset=0.0):
+        self.RenderingControl.X_Move360View(0, latitude_offset, longitude_offset)
+
+    def origin_360_view(self):
+        self.RenderingControl.X_Origin360View(0)
+
+    def zoom_360_view(self, scale_factor_offset=1.0):
+        self.RenderingControl.X_Zoom360View(0, scale_factor_offset)
+
+    def set_zoom(self, x, y, w, h):
+        self.RenderingControl.X_SetZoom(0, x, y, w, h)
+
+    @property
+    def brightness(self):
+        return self.RenderingControl.GetBrightness(0)[0]
+
+    @brightness.setter
+    def brightness(self, desired_brightness):
+        self.RenderingControl.SetBrightness(0, desired_brightness)
+
+    @property
+    def contrast(self):
+        return self.RenderingControl.GetContrast(0)[0]
+
+    @contrast.setter
+    def contrast(self, desired_contrast):
+        self.RenderingControl.SetContrast(0, desired_contrast)
+
+    @property
+    def sharpness(self):
+        return self.upnp_object.RenderingControl.GetSharpness(0)[0]
+
+    @sharpness.setter
+    def sharpness(self, desired_sharpness):
+        self.RenderingControl.SetSharpness(0, desired_sharpness)
+
+    @property
+    def color_temperature(self):
+        return self.RenderingControl.GetColorTemperature(0)[0]
+
+    @color_temperature.setter
+    def color_temperature(self, desired_color_temperature):
+        self.RenderingControl.SetColorTemperature(
+            0,
+            desired_color_temperature
+        )
+
+    @property
+    def dtv_information(self):
+        if self._dtv_information is None:
+            response, data = self.MainTVAgent2.GetDTVInformation()
+            data = saxutils.unescape(data)
+            self._dtv_information = etree.fromstring(data)
+        return self._dtv_information
+
+    def enforce_ake(self):
+        return self.MainTVAgent22.EnforceAKE()[0]
+
+    def get_all_program_information_url(self, antenna_mode, channel):
+        return self.MainTVAgent2.GetAllProgramInformationURL(
+            antenna_mode,
+            channel
+        )[1]
+
+    @property
+    def banner_information(self):
+        return self.MainTVAgent22.GetBannerInformation()[1]
+
+    def get_channel_lock_information(self, channel, antenna_mode):
+        lock, start_time, end_time = (
+            self.MainTVAgent2.GetChannelLockInformation(
+                channel,
+                antenna_mode
+            )[1:]
+        )
+
+        return dict(lock=lock, start_time=start_time, end_time=end_time)
+
+    def get_detail_program_information(
+        self,
+        antenna_mode,
+        channel,
+        start_time
+    ):
+        return self.MainTVAgent2.GetDetailProgramInformation(
+            antenna_mode,
+            channel,
+            start_time
+        )[1]
+
+    @property
+    def network_information(self):
+        return self.MainTVAgent2.GetNetworkInformation()[1]
+
+    @property
+    def antenna_mode(self):
+        raise NotImplementedError
+
+    @antenna_mode.setter
+    def antenna_mode(self, value):
+        self.MainTVAgent2.SetAntennaMode(value)
+
+    @property
+    def av_off(self):
+        raise NotImplementedError
+
+    @av_off.setter
+    def av_off(self, value):
+        self.MainTVAgent2.SetAVOff(value)
+
+    def set_channel_list_sort(self, channel_list_type, satellite_id, sort):
+        return self.MainTVAgent2.SetChannelListSort(
+            channel_list_type,
+            satellite_id,
+            sort
+        )[0]
+
+    def start_clone_view(self, forced_flag):
+        """BannerInformation, CloneViewURL, CloneInfo"""
+        banner_info, clone_view_url, clone_info = (
+            self.MainTVAgent2.StartCloneView(forced_flag)[1:]
+        )
+        return dict(
+            banner_info=banner_info,
+            clone_view_url=clone_view_url,
+            clone_info=clone_info
+        )
+
+    def set_clone_view_channel(self, channel_up_down):
+        return self.MainTVAgent2.SetCloneViewChannel(
+            channel_up_down
+        )[0]
+
+    def start_second_tv_view(
+        self,
+        antenna_mode,
+        channel_list_type,
+        satellite_id,
+        channel,
+        forced_flag
+    ):
+        banner_info, second_tv_url = (
+            self.MainTVAgent2.StartSecondTVView(
+                antenna_mode,
+                channel_list_type,
+                satellite_id,
+                channel,
+                forced_flag
+            )[1:]
+        )
+
+        return banner_info, second_tv_url
+
+    def stop_view(self, view_url):
+        return self.MainTVAgent2.StopView(view_url)[0]
+
+    def add_schedule(self, reservation_type, remind_info):
+        return self.MainTVAgent2.AddSchedule(
+            reservation_type,
+            remind_info
+        )[1]
+
+    def delete_schedule(self, uid):
+        return self.MainTVAgent2.DeleteSchedule(uid)[0]
+
+    def change_schedule(self, reservation_type, remind_info):
+        return self.MainTVAgent2.ChangeSchedule(
+            reservation_type,
+            remind_info
+        )[0]
+
+    def check_pin(self, pin):
+        return self.MainTVAgent2.CheckPIN(pin)[0]
+
+    def delete_channel_list(self, antenna_mode, channel_list):
+        return self.MainTVAgent2.DeleteChannelList(
+            antenna_mode,
+            channel_list
+        )[0]
+
+    def delete_channel_list_pin(self, antenna_mode, channel_list, pin):
+        return self.MainTVAgent2.DeleteChannelListPIN(
+            antenna_mode,
+            channel_list,
+            pin
+        )[0]
+
+    def delete_recorded_item(self, uid):
+        return self.MainTVAgent2.DeleteRecordedItem(uid)[0]
+
+    @property
+    def sources(self):
+        source_list = self.MainTVAgent2.GetSourceList()[1]
+        source_list = saxutils.unescape(source_list)
+        root = etree.fromstring(source_list)
+
+        sources = []
+
+        for src in root:
+            if src.tag == 'Source':
+                source_name = src.find('SourceType').text
+                source_id = int(src.find('ID').text)
+                source_editable = src.find('Editable').text == 'Yes'
+                sources += [
+                    Source(
+                        source_id,
+                        source_name,
+                        self,
+                        source_editable
+                    )
+                ]
+
+        return sources
+
+    @property
+    def source(self):
+        source_id = self.MainTVAgent2.GetCurrentExternalSource()[2]
+        for source in self.sources:
+            if source.id == int(source_id):
+                return source
+
+    @source.setter
+    def source(self, source):
+        if isinstance(source, int):
+            source_id = source
+            for source in self.sources:
+                if source.id == source_id:
+                    break
+            else:
+                raise ValueError('Source id not found ({0})'.format(source_id))
+
+        elif not isinstance(source, Source):
+            source_name = source
+            for source in self.sources:
+                if source_name in (
+                    source.name,
+                    source.label,
+                    source.device_name
+                ):
+                    break
+
+            else:
+                raise ValueError(
+                    'Source name not found ({0})'.format(source_name)
+                )
+
+        source.activate()
+
+    def start_ext_source_view(self, source, id):
+        forced_flag, banner_info, ext_source_view_url = (
+            self.MainTVAgent2.StartExtSourceView(source, id)[1:]
+        )
+
+        return forced_flag, banner_info, ext_source_view_url
+
+    @property
+    def channels(self):
+        supported_channels = (
+            self.MainTVAgent2.GetChannelListURL()[2]
+        )
+
+        channels = saxutils.unescape(supported_channels)
+        channels = etree.fromstring(channels)
+
+        supported_channels = []
+
+        for channel in channels:
+            channel_num = (
+                channel.find('MajorCh').text,
+                channel.find('MinorCh').text
+            )
+
+            supported_channels += [Channel(channel_num, channel, self)]
+
+        return supported_channels
+
+    @property
+    def channel(self):
+        channel = self.MainTVAgent2.GetCurrentMainTVChannel()[1]
+        channel = saxutils.unescape(channel)
+        channel = etree.fromstring(channel)
+        channel_num = (
+            channel.find('MajorCh').text,
+            channel.find('MinorCh').text
+        )
+
+        return Channel(channel_num, channel, self)
+
+    @channel.setter
+    def channel(self, channel):
+        """
+        can be a string with '.'s separating the
+        major/minor/micro for digital. or it can be a tuple of numbers.
+        or a Channel instance gotten from instance.channels.
+
+        """
+
+        for chnl in self.channels:
+            if chnl == channel:
+                chnl.activate()
+                break
         else:
-            self.remote = RemoteWebsocket(ip, self.device_id)
+            raise ValueError(
+                'Channel not found ({0})'.format(channel)
+            )
 
-    def __str__(self):
-        output = 'IP Address: ' + self.ip_address + '\n' + '-' * 40 + '\n\n'
-        output += str(self.main_tv_server) + '\n'
-        output += str(self.media_renderer) + '\n'
-        output += str(self.remote_receiver) + '\n'
-        return output
+    @property
+    def program_information_url(self):
+        return (
+            self.MainTVAgent2.GetCurrentProgramInformationURL()[1]
+        )
 
-    def __enter__(self):
-        return self.remote
+    @property
+    def current_time(self):
+        return self.MainTVAgent2.GetCurrentTime()[1]
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        pass
+    def get_detail_channel_information(self, channel, antenna_mode):
+        return self.MainTVAgent2.GetDetailChannelInformation(
+            channel,
+            antenna_mode
+        )[1]
 
-    def close(self):
-        self.remote.close()
+    def regional_variant_list(self, antenna_mode, channel):
+        return self.MainTVAgent2.GetRegionalVariantList(
+            antenna_mode,
+            channel
+        )[1]
+
+    @property
+    def schedule_list_url(self):
+        return self.MainTVAgent2.GetScheduleListURL()[1]
+
+    @property
+    def watching_information(self):
+        tv_mode, information = (
+            self.MainTVAgent2.GetWatchingInformation()[1:]
+        )
+        return dict(tv_mode=tv_mode, information=information)
+
+    def modify_favorite_channel(self, antenna_mode, favorite_ch_list):
+        return self.MainTVAgent2.ModifyFavoriteChannel(
+            antenna_mode,
+            favorite_ch_list
+        )[0]
+
+    def play_recorded_item(self, uid):
+        return self.MainTVAgent2.PlayRecordedItem(uid)[0]
+
+    def reorder_satellite_channel(self):
+        return self.MainTVAgent2.ReorderSatelliteChannel()[0]
+
+    def run_app(self, application_id):
+        return self.MainTVAgent2.RunApp(application_id)[0]
+
+    def run_browser(self, browser_url):
+        return self.MainTVAgent2.RunBrowser(browser_url)[0]
+
+    def run_widget(self, widget_title, payload):
+        return self.MainTVAgent2.RunWidget(widget_title, payload)[0]
+
+    @property
+    def mute(self):
+        try:
+            status = self.MainTVAgent2.GetMuteStatus()[1]
+        except AttributeError:
+            status = self.get_channel_mute('Master')
+
+        if status == 'Disable':
+            return False
+        else:
+            return True
+
+    @mute.setter
+    def mute(self, desired_mute):
+        if desired_mute:
+            desired_mute = 'Enable'
+        else:
+            desired_mute = 'Disable'
+        try:
+            self.MainTVAgent2.SetMute(desired_mute)
+        except AttributeError:
+            self.set_channel_mute('Master', desired_mute)
+
+    @property
+    def volume(self):
+        try:
+            current_volume = self.MainTVAgent2.GetVolume()[1]
+        except AttributeError:
+            current_volume = self.get_channel_volume('Master')
+
+        return current_volume
+
+    @volume.setter
+    def volume(self, desired_volume):
+        try:
+            self.MainTVAgent2.SetVolume(desired_volume)
+        except AttributeError:
+            self.set_channel_volume('Master', desired_volume)
+
+    def set_record_duration(self, channel, record_duration):
+        return self.MainTVAgent2.SetRecordDuration(
+            channel,
+            record_duration
+        )[0]
+
+    def set_regional_variant(self, antenna_mode, channel):
+        return self.MainTVAgent2.SetRegionalVariant(
+            antenna_mode,
+            channel
+        )[1]
+
+    def send_room_eq_data(
+        self,
+        total_count,
+        current_count,
+        room_eq_id,
+        room_eq_data
+    ):
+        return self.MainTVAgent2.SendRoomEQData(
+            total_count,
+            current_count,
+            room_eq_id,
+            room_eq_data
+        )[0]
+
+    def set_room_eq_test(self, room_eq_id):
+        return self.MainTVAgent2.SetRoomEQTest(
+            room_eq_id
+        )[0]
+
+    def start_instant_recording(self, channel):
+        return self.MainTVAgent2.StartInstantRecording(channel)[1]
+
+    def start_iperf_client(self, time, window_size):
+        return self.MainTVAgent2.StartIperfClient(
+            time,
+            window_size
+        )[0]
+
+    def start_iperf_server(self, time, window_size):
+        return self.MainTVAgent2.StartIperfServer(
+            time,
+            window_size
+        )[0]
+
+    def stop_iperf(self, ):
+        return self.MainTVAgent2.StopIperf()[0]
+
+    def stop_record(self, channel):
+        return self.MainTVAgent2.StopRecord(channel)[0]
+
+    def sync_remote_control_pannel(self, channel):
+        return self.MainTVAgent2.SyncRemoteControlPannel(channel)[1]
 
     @property
     def operating_system(self):
@@ -652,7 +859,7 @@ class UPNPTV(object):
 
     @property
     def device_id(self):
-        return self.main_tv_server.device_id
+        return self.MainTVAgent2.deviceID
 
     @property
     def panel_technology(self):
@@ -693,136 +900,267 @@ class UPNPTV(object):
 
     @property
     def model(self):
-        return self.main_tv_server.model_name
-
-    @property
-    def brightness(self):
-        return self.media_renderer.brightness
-
-    @brightness.setter
-    def brightness(self, value):
-        self.media_renderer.brightness = value
-
-    @property
-    def contrast(self):
-        return self.media_renderer.contrast
-
-    @contrast.setter
-    def contrast(self, value):
-        self.media_renderer.contrast = value
-
-    @property
-    def sharpness(self):
-        return self.media_renderer.sharpness
-
-    @sharpness.setter
-    def sharpness(self, value):
-        self.media_renderer.sharpness = value
-
-    @property
-    def color_temperature(self):
-        return self.media_renderer.color_temperature
-
-    @color_temperature.setter
-    def color_temperature(self, value):
-        self.media_renderer.color_temperature = value
-
-    @property
-    def media_info(self):
-        return self.media_renderer.media_info
-
-    @property
-    def transport_info(self):
-        return self.media_renderer.transport_info
-
-    @property
-    def transport_actions(self):
-        return self.media_renderer.transport_actions
-
-    @property
-    def position_info(self):
-        return self.media_renderer.position_info
-
-    @property
-    def channels(self):
-        return self.main_tv_server.channels
-
-    @property
-    def sources(self):
-        return self.main_tv_server.sources
-
-    @property
-    def source(self):
-        return self.main_tv_server.source
-
-    @source.setter
-    def source(self, value):
-        self.main_tv_server.source = value
-
-    @property
-    def channel(self):
-        return self.main_tv_server.channel
-
-    @channel.setter
-    def channel(self, value):
-        self.main_tv_server.channel = value
-
-    @property
-    def mute(self):
-        return self.main_tv_server.mute
-
-    @mute.setter
-    def mute(self, value):
-        self.main_tv_server.mute = value
-
-    @property
-    def volume(self):
-        return self.main_tv_server.volume
-
-    @volume.setter
-    def volume(self, value):
-        self.main_tv_server.volume = value
-
-    @property
-    def watching_information(self):
-        return self.main_tv_server.watching_information
+        return self.MainTVAgent2.model_name
 
     @property
     def year(self):
-        dtv_information = self.main_tv_server.dtv_information
+        dtv_information = self.dtv_information
         year = dtv_information.find('SupportTVVersion')
         return int(year.text)
 
     @property
     def region(self):
-        dtv_information = self.main_tv_server.dtv_information
+        dtv_information = self.dtv_information
         location = dtv_information.find('TargetLocation')
         return location.text.replace('TARGET_LOCATION_', '')
 
     @property
     def tuner_count(self):
-        dtv_information = self.main_tv_server.dtv_information
+        dtv_information = self.dtv_information
         tuner_count = dtv_information.find('TunerCount')
         return int(tuner_count.text)
 
     @property
     def dtv_support(self):
-        dtv_information = self.main_tv_server.dtv_information
+        dtv_information = self.dtv_information
         dtv = dtv_information.find('SupportDTV')
         return True if dtv.text == 'Yes' else False
 
     @property
     def pvr_support(self):
-        dtv_information = self.main_tv_server.dtv_information
+        dtv_information = self.dtv_information
         pvr = dtv_information.find('SupportPVR')
         return True if pvr.text == 'Yes' else False
 
-    def run_browser(self, url):
-        self.main_tv_server.run_browser(url)
 
-    def source_label(self, source, label):
-        self.main_tv_server.edit_source_name(source, label)
+@six.add_metaclass(InstanceSingleton)
+class Channel(object):
+
+    def __init__(self, channel_num, node, parent):
+        self._channel_num = channel_num
+        self._node = node
+        self._parent = parent
+
+    def __getattr__(self, item):
+
+        if item in self.__dict__:
+            return self.__dict__[item]
+
+        for child in self._node:
+            if child.tag == item:
+                value = child.text
+                if value.isdigit():
+                    value = int(value)
+
+                return value
+
+        raise AttributeError(item)
+
+    @property
+    def number(self):
+        return self._channel_number
+
+    @number.setter
+    def number(self, channel_number=(0, 0)):
+        """ channel_number = (major, minor)
 
 
-from samsungctl.upnp.discover import discover # NOQA
+        return self.MainTVAgent2.EditChannelNumber(
+            antenna_mode,
+            source,
+            destination,
+            forced_flag
+        )[0]
+        """
 
+        raise NotImplementedError
+
+    @property
+    def lock(self):
+        raise NotImplementedError
+
+    @lock.setter
+    def lock(self, value):
+        """
+        return self.MainTVAgent2.SetChannelLock(
+            antenna_mode,
+            channel_list,
+            lock,
+            pin,
+            start_time,
+            end_time
+        )[0]
+        """
+        raise NotImplementedError
+
+    @property
+    def pin(self):
+        raise NotImplementedError
+
+    @pin.setter
+    def pin(self, value):
+        """
+        return self.MainTVAgent2.SetMainTVChannelPIN(
+            antenna_mode,
+            channel_list_type,
+            pin,
+            satellite_id,
+            channel
+        )[0]
+        """
+        raise NotImplementedError
+
+    @property
+    def name(self):
+        return self._node.find('PTC').text
+
+    @name.setter
+    def name(self, value):
+        """
+        return self.MainTVAgent2.ModifyChannelName(
+            antenna_mode,
+            channel,
+            channel_name
+        )[1]
+        """
+        raise NotImplementedError
+
+    @property
+    def is_recording(self):
+        channel = self._parent.MainTVAgent2.GetRecordChannel()[1]
+        channel_num = (
+            channel.find('MajorCh').text,
+            channel.find('MinorCh').text
+        )
+        return self._channel_num == channel_num
+
+    @property
+    def is_active(self):
+        return self._parent.channel == self
+
+    def activate(self):
+        antenna_mode = 1
+        channel_list_type, satellite_id = (
+            self._parent.MainTVAgent2.GetChannelListURL()[4:1]
+        )
+
+        channel = etree.tostring(self._node)
+        channel = saxutils.escape(channel)
+
+        self._parent.MainTVAgent2.SetMainTVChannel(
+            antenna_mode,
+            channel_list_type,
+            satellite_id,
+            channel
+        )
+
+
+@six.add_metaclass(InstanceSingleton)
+class Source(object):
+
+    def __init__(
+        self,
+        id,
+        name,
+        parent,
+        editable,
+    ):
+        self._id = id
+        self.__name__ = name
+        self._parent = parent
+        self._editable = editable
+
+    @property
+    def id(self):
+        return self._id
+
+    @property
+    def name(self):
+        return self.__name__
+
+    @property
+    def is_viewable(self):
+        source = self.__source
+        return source.find('SupportView').text == 'Yes'
+
+    @property
+    def is_editable(self):
+        return self._editable
+
+    @property
+    def __source(self):
+        source_list = self._parent.MainTVAgent2.GetSourceList()[1]
+        source_list = saxutils.unescape(source_list)
+        root = etree.fromstring(source_list)
+
+        for src in root:
+            if src.tag == 'Source':
+                if int(src.find('ID').text) == self.id:
+                    return src
+
+    @property
+    def is_connected(self):
+        source = self.__source
+
+        connected = source.find('Connected')
+        if connected is not None:
+            if connected.text == 'Yes':
+                return True
+            if connected.text == 'No':
+                return False
+
+    @property
+    def label(self):
+        if self.is_editable:
+            source = self.__source
+
+            label = source.find('EditNameType')
+            if not label:
+                return self.name
+
+            return label.text
+        return self.name
+
+    @label.setter
+    def label(self, value):
+        if self.is_editable:
+            self._parent.MainTVAgent2.EditSourceName(self.name, value)
+
+    @property
+    def device_name(self):
+        source = self.__source
+        device_name = source.find('DeviceName')
+        if device_name is not None:
+            return device_name.text
+
+    @property
+    def is_active(self):
+        source_list = self._parent.MainTVAgent2.GetSourceList()[1]
+        source_list = saxutils.unescape(source_list)
+        root = etree.fromstring(source_list)
+        return int(root.find('ID').text) == self.id
+
+    def activate(self):
+        if self.is_connected:
+            self._parent.MainTVAgent2.SetMainTVSource(
+                self.name,
+                str(self.id),
+                str(self.id)
+            )
+
+    def __str__(self):
+        return self.label
+
+
+def discover(ip_address='0.0.0.0', log_level=None):
+    for addr, locations in _discover(8, log_level, ip_address):
+        location = locations[0]
+        response = requests.get(location)
+        root = etree.fromstring(response.content)
+        root = strip_xmlns(root)
+
+        device = root.find('device')
+        friendly_name = device.find('friendlyName').text
+        mfgr = device.find('manufacturer').text
+        if mfgr == 'Samsung Electronics' and friendly_name.startswith('[TV]'):
+            yield UPNPTV(addr, locations)

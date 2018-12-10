@@ -10,9 +10,6 @@ from . import __version__ as version
 from . import exceptions
 from . import Remote
 
-
-
-
 import logging
 from logging import NullHandler
 
