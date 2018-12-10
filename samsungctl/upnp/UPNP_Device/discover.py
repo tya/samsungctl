@@ -88,7 +88,10 @@ def discover(timeout=5, log_level=None, search_ip='0.0.0.0'):
                 adapter_ips += [adapter_ip.ip]
 
     def send_to(destination, t_out=5):
-        network = ipaddress.ip_network(destination.decode('utf-8'))
+        try:
+            network = ipaddress.ip_network(destination.decode('utf-8'))
+        except:
+            network = ipaddress.ip_network(destination)
 
         if isinstance(network, ipaddress.IPv6Network):
             mcast = IPV6_MCAST_GRP

@@ -406,7 +406,7 @@ class UPNPTV(UPNPObject):
         if self._dtv_information is None:
             response, data = self.MainTVAgent2.GetDTVInformation()
             data = saxutils.unescape(data)
-            self._dtv_information = etree.fromstring(data)
+            self._dtv_information = etree.fromstring(data.encode('utf-8'))
         return self._dtv_information
 
     def enforce_ake(self):
