@@ -19,6 +19,7 @@ class Remote(object):
     LOG_DEBUG = logging.DEBUG
 
     def __init__(self, ip_address=None, log_level=None):
+        self._discovering = threading.Event()
         if log_level is not None:
             logger.setLevel(log_level)
 
@@ -54,6 +55,8 @@ class Remote(object):
             else:
                 logger.warning('Unable to locate TV')
 
+            self._discovering.set()
+
         if isinstance(config, dict):
             if config['method'] == 'legacy':
                 self._remote = RemoteLegacy(config)
@@ -66,6 +69,10 @@ class Remote(object):
 
         else:
             do()
+
+    @property
+    def is_discovering(self):
+        return not self._discovering.isSet()
 
     def __enter__(self):
         return self._remote.__enter__()
