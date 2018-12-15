@@ -18,8 +18,10 @@ logging.basicConfig(format="%(message)s", level=None)
 logger.setLevel(logging.NOTSET)
 
 from .remote import Remote # NOQA
+from .config import Config # NOQA
+from .discover import discover # NOQA
 
 __all__ = (
     '__title__', '__version__', '__url__', '__author__', '__author_email__',
-    '__license__', 'Remote'
+    '__license__', 'Remote', 'Config', 'discover'
 )

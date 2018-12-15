@@ -40,8 +40,8 @@ class UPNPObject(object):
                 devices = []
 
             for service in services:
-                scpdurl = service.find('SCPDURL').text
-                control_url = service.find('controlURL').text
+                scpdurl = service.find('SCPDURL').text.replace(url, '')
+                control_url = service.find('controlURL').text.replace(url, '')
                 service_id = service.find('serviceId').text
                 service_type = service.find('serviceType').text
                 if location is not None:

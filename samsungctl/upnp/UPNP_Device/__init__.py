@@ -3,6 +3,7 @@
 
 
 import logging
+import threading
 from logging import NullHandler
 
 logger = logging.getLogger('UPNP_Devices')
@@ -12,14 +13,41 @@ logging.basicConfig(format="%(message)s", level=None)
 logger.setLevel(logging.NOTSET)
 
 
-from .discover import discover as _discover # NOQA
-from .listen import listen # NOQA
-from .upnp_class import UPNPObject # NOQA
+def discover(ip=None, log_level=logging.NOTSET):
+    from .discover import discover as _discover
+    from .discover import get_upnp_classes
+    from .xmlns import strip_xmlns
+    from .upnp_class import UPNPObject  # NOQA
 
+    found_event = threading.Event()
+    found = []
+    threads = []
 
-def discover(timeout=5, log_level=None, ip='0.0.0.0'):
-    for addr, locations in _discover(timeout, log_level, ip):
-        yield UPNPObject(addr, locations)
+    def do(addr):
+        locations = get_upnp_classes(addr, 8, log_level)
+        found.append(UPNPObject(addr, locations))
+        found_event.set()
+
+        if threading.current_thread() in threads:
+            threads.remove(threading.current_thread())
+
+    if ip is None:
+        for address in _discover(8, log_level):
+            t = threading.Thread(target=do, args=(address,))
+            t.daemon = True
+            threads += [t]
+            t.start()
+
+        while threads:
+            found_event.wait()
+            found_event.clear()
+            while found:
+                yield found.pop(0)
+
+    else:
+        do(ip)
+        if found:
+            yield found[0]
 
 
 __title__ = "UPNP_Device"

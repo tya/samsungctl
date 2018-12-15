@@ -15,19 +15,8 @@ PY3 = sys.version_info[0] >= 3
 class RemoteLegacy(object):
     """Object for remote control connection."""
 
-    def __init__(self, ip_address, device_id=None):
+    def __init__(self, config):
         """Make a new connection."""
-
-        if isinstance(ip_address, dict):
-            config = ip_address
-        else:
-            config = dict(
-                host=ip_address,
-                port=55000,
-                description=socket.gethostname(),
-                id=device_id,
-                name=socket.gethostname() + ':' + device_id
-            )
 
         self.send = self.control
         self._connect_event = threading.Event()
@@ -38,7 +27,7 @@ class RemoteLegacy(object):
 
     def open(self):
         self.connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.connection.connect((self.config["host"], self.config["port"]))
+        self.connection.connect((self.config.host, self.config.port))
 
         if PY3:
             payload = b'\x64\x00'
@@ -49,9 +38,9 @@ class RemoteLegacy(object):
             packet = '\x00\x00\x00'
 
         payload += (
-            self._serialize_string(self.config["description"]) +
-            self._serialize_string(self.config["id"]) +
-            self._serialize_string(self.config["name"])
+            self._serialize_string(self.config.description) +
+            self._serialize_string(self.config.id) +
+            self._serialize_string(self.config.name)
         )
 
         packet += self._serialize_string(payload, True)

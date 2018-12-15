@@ -5,9 +5,9 @@ import setuptools
 __doc__ = """Remote control Samsung televisions via TCP/IP connection"""
 
 __title__ = "samsungctl"
-__version__ = "0.7.1+1"
+__version__ = "0.8.0"
 __url__ = "https://github.com/kdschlosser/samsungctl"
-__author__ = "Lauri Niskanen, Kevin Schlosser"
+__author__ = "Lauri Niskanen, Kevin Schlosser, Tomer Shemesh"
 __author_email__ = "kevin.g.schlosser@gmail.com"
 __license__ = "MIT, GNUv2"
 
@@ -25,8 +25,21 @@ setuptools.setup(
     entry_points={
         "console_scripts": ["samsungctl=samsungctl.__main__:main"]
     },
-    packages=["samsungctl", "samsungctl.upnp", "samsungctl.upnp.UPNP_Device"],
-    install_requires=['requests', 'websocket-client', 'ifaddr', 'six', 'lxml'],
+    packages=[
+        "samsungctl",
+        "samsungctl.upnp",
+        "samsungctl.upnp.UPNP_Device",
+        "samsungctl.pySmartCrypto",
+        "samsungctl.pySmartCrypto.pyrijndael",
+    ],
+    install_requires=[
+        'requests',
+        'websocket-client',
+        'ifaddr',
+        'six',
+        'lxml',
+        'pyCryptodome'
+    ],
     extras_require={
         "interactive_ui": ["curses"],
     },
@@ -35,6 +48,7 @@ setuptools.setup(
         "Environment :: Console",
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 2",
         "Topic :: Home Automation",
     ],
 )
