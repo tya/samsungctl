@@ -1,7 +1,8 @@
 
 import logging
 import six
-
+import struct
+import socket
 from .remote_legacy import RemoteLegacy
 from .remote_websocket import RemoteWebsocket
 from .remote_encrypted import RemoteWebsocketEncrypted
@@ -104,6 +105,36 @@ class Remote(object):
                 raise RuntimeError('Unknown Error')
 
         self.upnp_tv = upnp_tv
+        self._power = True
+
+    @property
+    def power(self):
+        return self._power
+
+    @power.setter
+    def power(self, value):
+        if value and self.upnp_tv is not None and self.upnp_tv.year >= 2014:
+
+            # Took from the examples/Kodi.py
+            mac_address = Parameters["Mode1"].replace(':', '')
+            # Pad the synchronization stream.
+            data = ''.join(['FFFFFFFFFFFF', mac_address * 16])
+
+            # Domoticz.Log('data: ' + str(data) + " , len: " + str(len(data)))
+
+            send_data = b''
+            # Split up the hex values and pack.
+            for i in range(0, len(data), 2):
+                send_data = b''.join(
+                    [send_data, struct.pack('B', int(data[i: i + 2], 16))])
+
+            # Broadcast it to the LAN.
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            sock.sendto(send_data, ('<broadcast>', 7))
+            # Domoticz.Log('send_data: ' + str(send_data))
+
+
 
     def __enter__(self):
         return self._remote.__enter__()
@@ -136,5 +167,22 @@ class Remote(object):
         else:
             if self.upnp_tv is not None:
                 setattr(self.upnp_tv, key, value)
+
+    @property
+    def apps(self):
+
+        if self.upnp_tv is not None:
+
+            if self.upnp_tv.apps_list_available:
+
+                self._remote.get_aps('ed.installedApp.get')
+
+
+            if self.upnp_tv.eden_available:
+                self._remote.get_aps('ed.edenApp.get')
+
+
+        for app in
+
 
 

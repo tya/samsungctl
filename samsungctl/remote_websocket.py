@@ -61,6 +61,7 @@ class RemoteWebsocket(WebSocketApp):
             self._connect_event.set()
 
         else:
+            self._response_data = response
             self._receive_event.set()
 
     def __init__(self, config):
@@ -73,6 +74,7 @@ class RemoteWebsocket(WebSocketApp):
         self._send_lock = threading.Lock()
         self._socket = None
         self._run_thread = None
+        self._response_data = None
 
     def open(self):
         self.run_forever()
@@ -154,6 +156,30 @@ class RemoteWebsocket(WebSocketApp):
         """Close the connection."""
         logger.debug("Closing Websocket Connection.")
         WebSocketApp.close(self)
+
+    def get_apps(self, event):
+
+
+
+        with self._send_lock:
+
+            apps_command = dict(
+                method='ms.channel.emit',
+                params=dict(
+                    event=event,
+                    to='host'
+                )
+            )
+
+            payload = json.dumps(apps_command)
+            logger.debug("Command data: %s", payload)
+            self._receive_event.clear()
+            self._response_data = {}
+            WebSocketApp.send(self, payload)
+            self._receive_event.wait(1.0)
+
+            response = self._response_data
+
 
     def control(self, key):
         """Send a control command."""

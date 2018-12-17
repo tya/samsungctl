@@ -24,15 +24,23 @@ class UPNPTV(UPNPObject):
         try:
             response = requests.get(url)
             response = response.json()
+            if 'isSupport' in response:
+                import json
+                self._is_support = json.loads(response['isSupport'])
+            else:
+                self._is_support = {}
+
             if 'device' in response:
                 self.new_gen = True
                 self._tv_options = response['device']
+
             else:
                 self.new_gen = False
                 self._tv_options = {}
         except:
             self._tv_options = {}
             self.new_gen = False
+            self._is_support = {}
 
         self.name = self.__name__
 
@@ -877,6 +885,54 @@ class UPNPTV(UPNPObject):
         return 'Unknown'
 
     @property
+    def dmp_drm_playready(self):
+        if 'DMP_DRM_PLAYREADY' in self._is_support:
+            return self._is_support['DMP_DRM_PLAYREADY']
+        return False
+
+    @property
+    def dmp_drm_widevine(self):
+        if 'DMP_DRM_WIDEVINE' in self._is_support:
+            return self._is_support['DMP_DRM_WIDEVINE']
+        return False
+
+    @property
+    def dmp_available(self):
+        if 'DMP_available' in self._is_support:
+            return self._is_support['DMP_available']
+        return False
+
+    @property
+    def eden_available(self):
+        if 'EDEN_available' in self._is_support:
+            return self._is_support['EDEN_available']
+        return False
+
+    @property
+    def apps_list_available(self):
+        if self._tv_options:
+            return True
+        return False
+
+    @property
+    def ime_synced_support(self):
+        if 'ImeSyncedSupport' in self._is_support:
+            return self._is_support['ImeSyncedSupport']
+        return False
+
+    @property
+    def remote_four_directions(self):
+        if 'remote_fourDirections' in self._is_support:
+            return self._is_support['remote_fourDirections']
+        return False
+
+    @property
+    def remote_touch_pad(self):
+        if 'remote_touchPad' in self._is_support:
+            return self._is_support['remote_touchPad']
+        return False
+
+    @property
     def voice_support(self):
         if 'VoiceSupport' in self._tv_options:
             return self._tv_options['VoiceSupport']
@@ -888,6 +944,10 @@ class UPNPTV(UPNPObject):
             return self._tv_options['firmwareVersion']
 
         return 'Unknown'
+
+    wifi_mac
+    network_type
+
 
     @property
     def network_type(self):
