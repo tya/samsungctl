@@ -15,7 +15,6 @@ from . import application
 
 logger = logging.getLogger('samsungctl')
 
-
 URL_FORMAT = "ws://{}:{}/api/v2/channels/samsung.remote.control?name={}"
 SSL_URL_FORMAT = "wss://{}:{}/api/v2/channels/samsung.remote.control?name={}"
 
@@ -53,7 +52,7 @@ class RemoteWebsocket(websocket.WebSocketApp):
 
         self.open()
 
-    def on_open(self, *_):
+    def on_open(self, ws):
         logger.debug('Websocket Connection Opened')
         self.open_event.set()
 
@@ -103,6 +102,8 @@ class RemoteWebsocket(websocket.WebSocketApp):
                         self._serialize_string(self.config["name"])
                     )
 
+                logger.debug('opening websocket connection')
+
                 super(RemoteWebsocket, self).__init__(url)
 
             if token or self.config['port'] == 8002:
@@ -116,20 +117,20 @@ class RemoteWebsocket(websocket.WebSocketApp):
 
         threading.Thread(target=do).start()
 
-        self.open_event.wait(5.0)
-        if not self.open_event.isSet():
-            raise RuntimeError('Connection Failure')
+        # self.open_event.wait(5.0)
+        # if not self.open_event.isSet():
+        #     raise RuntimeError('Connection Failure')
 
         self.auth_event.wait(30.0)
         if not self.auth_event.isSet():
             self.close()
             raise RuntimeError('Auth Failure')
 
-    def on_close(self, *_):
+    def on_close(self, ws):
         logger.debug('Websocket Connection Closed')
 
-    def on_error(self, *args):
-        logger.error('Websocket error: %s', args)
+    def on_error(self, ws, err):
+        logger.error('Websocket error: %s', err)
 
     def __enter__(self):
         return self
@@ -231,12 +232,7 @@ class RemoteWebsocket(websocket.WebSocketApp):
     def register_receive_callback(self, callback, key, data):
         self._registered_callbacks += [[callback, key, data]]
 
-    def on_message(self, *args):
-        if len(args) == 1:
-            message = args[0]
-        else:
-            message = args[1]
-
+    def on_message(self, ws, message):
         response = json.loads(message)
         logger.debug('incoming message: ' + message)
 
