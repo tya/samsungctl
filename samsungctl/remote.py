@@ -3,6 +3,7 @@
 from . import exceptions
 from .remote_legacy import RemoteLegacy
 from .remote_websocket import RemoteWebsocket
+from .remote_encrypted import RemoteWebsocketEncrypted
 
 
 class Remote:
@@ -11,6 +12,8 @@ class Remote:
             self.remote = RemoteLegacy(config)
         elif config["method"] == "websocket":
             self.remote = RemoteWebsocket(config)
+        elif config["method"] == "encrypted":
+            self.remote = RemoteWebsocketEncrypted(config)
         else:
             raise exceptions.UnknownMethod()
 
