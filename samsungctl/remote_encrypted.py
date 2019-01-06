@@ -74,13 +74,13 @@ class RemoteWebsocketEncrypted(WebSocketApp):
     def pairing_url(self):
         if self.pairing_step == 3:
             millis = int(round(time.time() * 1000))
-            url = PAIRING_URL_FINAL.format(self.config.host, millis=millis)
+            url = PAIRING_URL_FINAL.format(self.config["host"], millis=millis)
         else:
             url = PAIRING_URL.format(
-                ip=self.config.ip,
-                http_port=self.config.http_port,
+                ip=self.config["host"],
+                http_port=self.config["http_port"],
                 step=self.pairing_step,
-                device_id=self.config.device_id
+                device_id=self.config["id"]
             )
 
             if self.pairing_step == 0:
@@ -92,18 +92,18 @@ class RemoteWebsocketEncrypted(WebSocketApp):
 
     @property
     def pin(self):
-        return self.config.token
+        return self.config["token"]
 
     @pin.setter
     def pin(self, pin):
-        self.config.token = pin
+        self.config["token"] = pin
         self.run_forever()
 
     @property
     def is_pin_page_open(self):
         url = PIN_URL_OPEN.format(
-            ip=self.config.host,
-            http_port=self.config.http_port,
+            ip=self.config["host"],
+            http_port=self.config["http_port"],
         )
         response = requests.get(url)
         response = re.search(
@@ -123,13 +123,19 @@ class RemoteWebsocketEncrypted(WebSocketApp):
         if self.pin is None:
             if not self.is_pin_page_open:
                 url = PIN_URL_OPEN.format(
-                    ip=self.config.host,
-                    http_port=self.config.http_port,
+                    ip=self.config["host"],
+                    http_port=self.config["http_port"],
                 )
 
                 requests.post(url, "pin4")
+            try:
+                pin = raw_input('Enter Pin from TV:')
+            except NameError:
+                pin = input('Enter Pin from TV:')
+
+            self.pin = pin
         else:
-            self.pin = self.config.token
+            self.pin = self.config["token"]
 
     def run_forever(self):
         def do():
@@ -140,7 +146,7 @@ class RemoteWebsocketEncrypted(WebSocketApp):
             requests.get(self.pairing_url)
 
             server_hello, data_hash, aes_key = crypto.generate_server_hello(
-                self.config.id,
+                self.config["id"],
                 self.pin
             )
 
@@ -168,7 +174,7 @@ class RemoteWebsocketEncrypted(WebSocketApp):
                     client_hello,
                     data_hash,
                     aes_key,
-                    self.config.id
+                    self.config["id"]
                 )
 
                 ack_message = crypto.generate_server_acknowledge(sk_prime)
@@ -211,8 +217,8 @@ class RemoteWebsocketEncrypted(WebSocketApp):
 
                 response = requests.get(self.pairing_url)
                 url = WEBSOCKET_URL.format(
-                    ip=self.config.host,
-                    port=self.config.port,
+                    ip=self.config["host"],
+                    port=self.config["port"],
                     path=response.content.split(':')[0]
                 )
 
@@ -221,8 +227,8 @@ class RemoteWebsocketEncrypted(WebSocketApp):
 
                 if self.is_pin_page_open:
                     url = PIN_URL_CLOSE.format(
-                        ip=self.config.host,
-                        http_port=self.config.http_port
+                        ip=self.config["host"],
+                        http_port=self.config["http_port"]
                     )
                     requests.delete(url)
                 self._connect_event.clear()
