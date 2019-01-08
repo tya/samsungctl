@@ -7,11 +7,19 @@ import keys
 import struct
 from .pyrijndael.rijndael import Rijndael
 
+import logging
+
+logger = logging.getLogger('samsungctl')
+
 BLOCK_SIZE = 16
 SHA_DIGEST_LENGTH = 20
 
+USER_ID_POS = 15
+USER_ID_LEN_POS = 11
+GX_SIZE = 0x80
 
-def EncryptParameterDataWithAES(input):
+
+def encrypt_parameter_data_with_aes(inpt):
     iv = b"\x00" * BLOCK_SIZE
     output = b""
     for num in range(0, 128, 16):
@@ -20,11 +28,11 @@ def EncryptParameterDataWithAES(input):
             AES.MODE_CBC,
             iv
         )
-        output += cipher.encrypt(input[num:num+16])
+        output += cipher.encrypt(inpt[num:num+16])
     return output
 
 
-def DecryptParameterDataWithAES(input):
+def decrypt_parameter_data_with_aes(inpt):
     iv = b"\x00" * BLOCK_SIZE
     output = b""
     for num in range(0, 128, 16):
@@ -34,7 +42,7 @@ def DecryptParameterDataWithAES(input):
             iv
         )
 
-        output += cipher.decrypt(input[num:num+16])
+        output += cipher.decrypt(inpt[num:num+16])
     return output
 
 
@@ -46,26 +54,30 @@ def apply_samygo_key_transform(input):
 def generate_server_hello(user_id, pin):
     sha1 = hashlib.sha1()
     sha1.update(pin.encode('utf-8'))
+
     pin_hash = sha1.digest()
+    logger.debug('crypto: pin hash: ', pin_hash)
+
     aes_key = pin_hash[:16]
-    print("AES key:", hex(int(aes_key)))
+    logger.debug('crypto: aes: ', aes_key)
 
     iv = b"\x00" * BLOCK_SIZE
     cipher = AES.new(aes_key, AES.MODE_CBC, iv)
 
     encrypted = cipher.encrypt(bytes(bytearray.fromhex(keys.publicKey)))
-    print("AES encrypted:", encrypted.hex())
+    logger.debug('crypto: aes encrypted: ', encrypted.hex())
 
-    swapped = EncryptParameterDataWithAES(encrypted)
-    print("AES swapped:", hex(int(swapped)))
+    swapped = encrypt_parameter_data_with_aes(encrypted)
+    logger.debug('crypto: aes swapped: ', swapped)
 
     data = struct.pack(">I", len(user_id)) + user_id.encode('utf-8') + swapped
-    print("data buffer:", '0x' + hex(int(data))[2:].upper())
+    logger.debug('crypto: data buffer: ', data)
 
     sha1 = hashlib.sha1()
     sha1.update(data)
+
     data_hash = sha1.digest()
-    print("hash: " + data_hash.hex())
+    logger.debug('crypto: data hash: ', data_hash)
 
     server_hello = (
         b"\x01\x02" +
@@ -79,10 +91,9 @@ def generate_server_hello(user_id, pin):
 
 
 def parse_client_hello(client_hello, data_hash, aes_key, g_user_id):
-    USER_ID_POS = 15
-    USER_ID_LEN_POS = 11
-    GX_SIZE = 0x80
+
     data = bytes(bytearray.fromhex(client_hello))
+    logger.debug('crypto: client hello: ', data)
 
     first_len = struct.unpack(">I", data[7:11])[0]
     user_id_len = struct.unpack(">I", data[11:15])[0]
@@ -91,59 +102,58 @@ def parse_client_hello(client_hello, data_hash, aes_key, g_user_id):
     dest_len = user_id_len + 132 + SHA_DIGEST_LENGTH
     third_len = user_id_len + 132
 
-    print("thirdLen:", str(third_len))
-    print("hello:", hex(int(data)))
-
     start = USER_ID_LEN_POS
     stop = third_len + USER_ID_LEN_POS
+
     dest = data[start:stop] + data_hash
-    print("dest:", hex(int(dest)))
+    logger.debug('crypto: dest: ', dest)
 
     start = USER_ID_POS
     stop = user_id_len + USER_ID_POS
+
     user_id = data[start:stop]
-    print("userId:", user_id.decode('utf-8'))
+    logger.debug('crypto: useer id: ', user_id)
 
     start = stop
     stop += GX_SIZE
-    p_enc_wbgx = data[start:stop]
-    print("pEncWBGx:", hex(int(p_enc_wbgx)))
 
-    p_enc_gx = DecryptParameterDataWithAES(p_enc_wbgx)
-    print("pEncGx:", hex(int(p_enc_gx)))
+    p_enc_wbgx = data[start:stop]
+    logger.debug('crypto: pEncWBGx: ', p_enc_wbgx)
+
+    p_enc_gx = decrypt_parameter_data_with_aes(p_enc_wbgx)
+    logger.debug('crypto: pEncGx: ', p_enc_gx)
 
     iv = b"\x00" * BLOCK_SIZE
     cipher = AES.new(aes_key, AES.MODE_CBC, iv)
+
     pgx = cipher.decrypt(p_enc_gx)
-    print("pGx:", hex(int(pgx)))
+    logger.debug('crypto: pGx: ', pgx)
 
     bn_pgx = int(pgx, 16)
     bn_prime = int(keys.prime, 16)
     bn_private_key = int(keys.privateKey, 16)
-
     secret_hex = hex(pow(bn_pgx, bn_private_key, bn_prime))[2:].upper()
+
     secret = bytes(bytearray.fromhex(secret_hex.replace('L', '')))
-    print("secret:", hex(int(secret)))
+    logger.debug('crypto: secret: ', secret)
 
     start = stop
     stop += SHA_DIGEST_LENGTH
 
     data_hash2 = data[start:stop]
-    print("hash2:", hex(int(data_hash2)))
+    logger.debug('crypto: data hash 2: ', data_hash2)
 
     secret2 = user_id + secret
-    print("secret2:", hex(int(secret2)))
+    logger.debug('crypto: secret 2: ', secret2)
 
     sha1 = hashlib.sha1()
     sha1.update(secret2)
     data_hash3 = sha1.digest()
-    print("hash3:", hex(int(data_hash3)))
+    logger.debug('crypto: data hash 3: ', data_hash3)
 
     if data_hash2 != data_hash3:
         print("Pin error!!!")
         return False
-
-    print("Pin OK :)\n")
 
     start = stop
     stop += 1
@@ -160,7 +170,7 @@ def parse_client_hello(client_hello, data_hash, aes_key, g_user_id):
     sha1 = hashlib.sha1()
     sha1.update(dest)
     dest_hash = sha1.digest()
-    print("dest_hash:", hex(int(dest_hash)))
+    logger.debug('crypto: dest hash: ', dest_hash)
 
     final_buffer = (
         user_id +
@@ -171,15 +181,19 @@ def parse_client_hello(client_hello, data_hash, aes_key, g_user_id):
     )
     sha1 = hashlib.sha1()
     sha1.update(final_buffer)
+
     sk_prime = sha1.digest()
-    print("SKPrime:", hex(int(sk_prime)))
+    logger.debug('crypto: sk prime: ', sk_prime)
 
     sha1 = hashlib.sha1()
     sha1.update(sk_prime + b"\x00")
+
     sk_prime_hash = sha1.digest()
-    print("SKPrimeHash:", hex(int(sk_prime_hash)))
+    logger.debug('crypto: sk prime hash: ', sk_prime_hash)
 
     ctx = apply_samygo_key_transform(sk_prime_hash[:16])
+    logger.debug('crypto: ctx: ', ctx)
+
     return hex(int(ctx)), sk_prime
 
 
@@ -190,7 +204,7 @@ def generate_server_acknowledge(sk_prime):
 
     return (
         "0103000000000000000014" +
-        hex(int(sk_prime_hash)).upper() +
+        sk_prime_hash.hex().upper() +
         "0000000000"
     )
 
@@ -201,7 +215,7 @@ def parse_client_acknowledge(client_ack, sk_prime):
     sk_prime_hash = sha1.digest()
     tmp_client_ack = (
         "0104000000000000000014" +
-        hex(int(sk_prime_hash)).upper() +
+        sk_prime_hash.hex().upper() +
         "0000000000"
     )
 

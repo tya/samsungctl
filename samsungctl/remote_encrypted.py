@@ -86,7 +86,9 @@ class RemoteWebsocketEncrypted(WebSocketApp):
             if self.pairing_step == 0:
                 url += "&type=1"
 
-            self.pairing_step += 1
+        self.pairing_step += 1
+
+        logger.debug('pairing step %s: $s', self.pairing_step, url)
 
         return url
 
@@ -139,16 +141,30 @@ class RemoteWebsocketEncrypted(WebSocketApp):
 
     def run_forever(self):
         def do():
+            logger.debug(
+                'Opening websocket connection to %s:%s',
+                self.config['host'],
+                self.config['port']
+            )
             WebSocketApp.run_forever(self)
             self._run_thread = None
 
         if self._run_thread is None:
-            requests.get(self.pairing_url)
+            response = requests.get(self.pairing_url)
+
+            logger.debug(
+                'step %s response: %s',
+                self.pairing_step,
+                response.content
+            )
 
             server_hello, data_hash, aes_key = crypto.generate_server_hello(
                 self.config["id"],
                 self.pin
             )
+            logger.debug('server hello: ', server_hello)
+            logger.debug('data hash: ', data_hash)
+            logger.debug('aes key: ', aes_key)
 
             content = dict(
                 auth_Data=dict(
@@ -160,6 +176,12 @@ class RemoteWebsocketEncrypted(WebSocketApp):
             content = json.dumps(content)
             response = requests.post(self.pairing_url, content)
 
+            logger.debug(
+                'step %s response: %s',
+                self.pairing_step,
+                response.content
+            )
+
             response = re.search(
                 'request_id.*?(\d).*?GeneratorClientHello.*?:.*?(\d[0-9a-zA-Z]*)',
                 response.content,
@@ -169,6 +191,10 @@ class RemoteWebsocketEncrypted(WebSocketApp):
             if response is not None:
                 request_id = response.group(1)
                 client_hello = response.group(2)
+
+                logger.debug('client hello: ', client_hello)
+                logger.debug('request id: ', request_id)
+
                 self.last_request_id = int(request_id)
                 ctx, sk_prime = crypto.parse_client_hello(
                     client_hello,
@@ -177,7 +203,12 @@ class RemoteWebsocketEncrypted(WebSocketApp):
                     self.config["id"]
                 )
 
+                logger.debug('ctx: ', ctx)
+                logger.debug('sk prime: ', sk_prime)
+
                 ack_message = crypto.generate_server_acknowledge(sk_prime)
+                logger.debug('ack message: ', ack_message)
+
                 content = dict(
                     auth_Data=dict(
                         auth_type="SPC",
@@ -188,6 +219,12 @@ class RemoteWebsocketEncrypted(WebSocketApp):
                 content = json.dumps(content)
 
                 response = requests.post(self.pairing_url, content)
+                logger.debug(
+                    'step %s response: %s',
+                    self.pairing_step,
+                    response.content
+                )
+
                 response = response.content
 
                 if "secure-mode" in response:
@@ -207,6 +244,9 @@ class RemoteWebsocketEncrypted(WebSocketApp):
                     )
 
                 client_ack = response.group(1)
+
+                logger.debug('client ack: ', client_ack)
+
                 if not crypto.parse_client_acknowledge(client_ack, sk_prime):
                     raise RuntimeError(
                         "Parse client ac message failed."
@@ -215,7 +255,16 @@ class RemoteWebsocketEncrypted(WebSocketApp):
                 self.session_id = response.group(2)
                 self.ctx = ctx.upper()
 
+                logger.debug('session id: ', self.session_id)
+
                 response = requests.get(self.pairing_url)
+
+                logger.debug(
+                    'step %s response: %s',
+                    self.pairing_step,
+                    response.content
+                )
+
                 url = WEBSOCKET_URL.format(
                     ip=self.config["host"],
                     port=self.config["port"],
@@ -231,6 +280,7 @@ class RemoteWebsocketEncrypted(WebSocketApp):
                         http_port=self.config["http_port"]
                     )
                     requests.delete(url)
+
                 self._connect_event.clear()
                 self._receive_event.clear()
 

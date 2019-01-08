@@ -4,6 +4,10 @@ from Crypto.Cipher import AES
 import binascii
 import json
 
+import logging
+
+logger = logging.getLogger('samsungctl')
+
 # Padding for the input string --not
 # related to encryption itself.
 BLOCK_SIZE = 16  # Bytes
@@ -55,6 +59,8 @@ class AESCipher:
             )
         )
 
+        logger.debug('generated command step 1: %s', str(command))
+
         command_array = ','.join(
             map(str, self.encrypt(json.dumps(command)))
         )
@@ -70,5 +76,7 @@ class AESCipher:
                 ]
             )
         }
+
+        logger.debug('generated command step 2: %s', str(res))
 
         return json.dumps(res)

@@ -8,6 +8,7 @@ from logging import NullHandler
 logger = logging.getLogger('samsungctl')
 logger.addHandler(NullHandler())
 logging.basicConfig(format="%(message)s", level=None)
+logger.setLevel(logging.DEBUG)
 
 
 from .remote import Remote # NOQA
