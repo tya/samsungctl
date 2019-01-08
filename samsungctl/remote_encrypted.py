@@ -7,8 +7,8 @@ import time
 import json
 import threading
 import logging
+import websocket
 from . import exceptions
-from websocket import WebSocketApp
 from .pySmartCrypto.command_encryption import AESCipher
 from .pySmartCrypto import crypto
 
@@ -27,7 +27,7 @@ PAIRING_URL = (
 )
 
 
-class RemoteWebsocketEncrypted(WebSocketApp):
+class RemoteWebsocketEncrypted(websocket.WebSocketApp):
     """Object for remote control connection."""
 
     def on_open(self, ws):
@@ -46,6 +46,14 @@ class RemoteWebsocketEncrypted(WebSocketApp):
         self._receive_event.set()
 
     def __init__(self, config):
+        version = tuple(int(v) for v in websocket.__version__.split('.'))
+        if version > (0, 48, 0):
+            raise RuntimeError(
+                'Incompatible websocket-client '
+                'library version ' + websocket.__version__ +
+                'version 0.48.0 is required'
+            )
+
         self.config = config
 
         self.last_request_id = 0
@@ -146,7 +154,7 @@ class RemoteWebsocketEncrypted(WebSocketApp):
                 self.config['host'],
                 self.config['port']
             )
-            WebSocketApp.run_forever(self)
+            websocket.WebSocketApp.run_forever(self)
             self._run_thread = None
 
         if self._run_thread is None:
@@ -300,7 +308,7 @@ class RemoteWebsocketEncrypted(WebSocketApp):
     def close(self):
         """Close the connection."""
         logger.debug("Closing Websocket Connection.")
-        WebSocketApp.close(self)
+        websocket.WebSocketApp.close(self)
 
     def control(self, key):
         """Send a control command."""
@@ -314,10 +322,10 @@ class RemoteWebsocketEncrypted(WebSocketApp):
             logger.debug("Command data: %s", payload)
 
             self._receive_event.clear()
-            WebSocketApp.send(self, '1::/com.samsung.companion')
+            websocket.WebSocketApp.send(self, '1::/com.samsung.companion')
             self._receive_event.wait(self._key_interval)
             self._receive_event.clear()
-            WebSocketApp.send(self, payload)
+            websocket.WebSocketApp.send(self, payload)
             self._receive_event.wait(self._key_interval)
 
     _key_interval = 0.35
