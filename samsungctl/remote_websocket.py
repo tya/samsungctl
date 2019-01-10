@@ -207,14 +207,15 @@ class RemoteWebsocket(object):
         eden_event.wait(2.0)
         installed_event.wait(2.0)
 
-        for app_1 in app_data[1]['data']:
+        for app_1 in app_data[1]:
             for app_2 in app_data[0]:
                 if app_1['appId'] == app_2['appId']:
-                   app_1.update(app_2)
+                    app_1.update(app_2)
 
         res = []
-        for app in app_data[1]['data']:
+        for app in app_data[1]:
             res += [application.Application(self, **app)]
+
         return res
 
     def register_mouse_callback(self, cls, response):
