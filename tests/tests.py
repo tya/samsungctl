@@ -2335,14 +2335,23 @@ class LegacySocket(object):
         try:
             while not self._event.isSet():
                 data = conn.recv(4096)
-                if self.on_message is not None:
+                if self.on_message is not None and data:
                     self.on_message(data)
-
         except socket.error:
             pass
 
     def close(self):
-        self.sock.close()
+        self._event.set()
+        try:
+            self.sock.shutdown(socket.SHUT_RDWR)
+        except socket.error:
+            pass
+        try:
+            self.sock.close()
+        except socket.error:
+            pass
+
+        self._thread.join(3.0)
 
 
 def send_key(func):
