@@ -124,9 +124,9 @@ class RemoteWebsocket(object):
 
         self._power_event.set()
         self.sock = None
+        del self._registered_callbacks[:]
         logger.info('Websocket closed')
         self._loop_event.clear()
-        del self._registered_callbacks[:]
         self._thread = None
 
     @LogIt
@@ -190,6 +190,12 @@ class RemoteWebsocket(object):
                     raise RuntimeError('Authentication denied')
 
             def auth_callback(data):
+                self.unregister_receive_callback(
+                    unauthorized_callback,
+                    'event',
+                    'ms.channel.unauthorized'
+                )
+
                 if 'data' in data and 'token' in data["data"]:
                     self.config.token = data['data']["token"]
                     logger.debug('new token: ' + self.config.token)
@@ -197,11 +203,6 @@ class RemoteWebsocket(object):
                 logger.debug("Access granted.")
                 auth_event.set()
 
-                self.unregister_receive_callback(
-                    unauthorized_callback,
-                    'event',
-                    'ms.channel.unauthorized'
-                )
                 self._power_event.set()
 
             self.register_receive_callback(
@@ -220,6 +221,7 @@ class RemoteWebsocket(object):
             self._thread.start()
 
             auth_event.wait(30.0)
+
             if not auth_event.isSet():
                 self.close()
                 raise RuntimeError('Auth Failure')
@@ -238,6 +240,9 @@ class RemoteWebsocket(object):
         if self.sock is not None:
             self._loop_event.set()
             self.sock.close()
+            self._thread.join(3.0)
+            if self._thread is not None:
+                raise RuntimeError('Loop thread did not properly terminate')
 
     @LogIt
     def send(self, method, **params):
@@ -416,6 +421,7 @@ class RemoteWebsocket(object):
             if key in response and (data is None or response[key] == data):
                 callback(response)
                 self._registered_callbacks.remove([callback, key, data])
+                break
 
     @LogIt
     def start_voice_recognition(self):

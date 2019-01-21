@@ -102,6 +102,7 @@ class FakeWebsocketClient(object):
         self.on_connect = None
         self.on_message = None
         self.on_close = None
+        self._shutting_down = False
         self.recv_event = threading.Event()
 
     def __call__(self, url, sslopt, enable_multithread=False):
@@ -128,11 +129,16 @@ class FakeWebsocketClient(object):
 
     def recv(self):
         self.recv_event.wait()
+        if self._shutting_down:
+            return ''
+
         self.recv_event.clear()
         response = json.dumps(self.return_data.pop(0))
         return response
 
     def close(self):
+        self._shutting_down = True
+        self.recv_event.set()
         self.on_close()
 
 
@@ -1188,10 +1194,8 @@ class WebSocketTest(unittest.TestCase):
             self.fail('TIMED_OUT')
 
     def test_999_DISCONNECT(self):
-        if self.remote is None:
-            self.fail('NO_CONNECTION')
-
-        self.remote.close()
+        if self.remote is not None:
+            self.remote.close()
 
     def on_disconnect(self):
         pass
@@ -1277,6 +1281,8 @@ class WebSocketSSLTest(unittest.TestCase):
             else:
                 logger.info('connection successful')
         except:
+            import traceback
+            traceback.print_exc()
             WebSocketSSLTest.remote = None
             self.fail('unable to establish connection')
 
@@ -2274,10 +2280,8 @@ class WebSocketSSLTest(unittest.TestCase):
             self.fail('TIMED_OUT')
 
     def test_999_DISCONNECT(self):
-        if self.remote is None:
-            self.fail('NO_CONNECTION')
-
-        self.remote.close()
+        if self.remote is not None:
+            self.remote.close()
 
     def on_disconnect(self):
         pass
@@ -3059,9 +3063,7 @@ class LegacyTest(unittest.TestCase):
         pass
 
     def test_999_DISCONNECT(self):
-        if self.remote is None:
-            self.skipTest('NO_CONNECTION')
-        else:
+        if self.remote is not None:
             self.remote.close()
 
         self.client.close()

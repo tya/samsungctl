@@ -11,7 +11,7 @@ from .upnp.UPNP_Device.discover import discover
 logger = logging.getLogger('samsungctl')
 
 
-class Remote:
+class Remote(object):
     def __init__(self, config):
         self._upnp_tv = None
         if isinstance(config, dict):
