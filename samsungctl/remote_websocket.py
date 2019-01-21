@@ -6,8 +6,6 @@ import json
 import logging
 import threading
 import ssl
-import os
-import sys
 import websocket
 import time
 from . import exceptions
@@ -27,24 +25,7 @@ class RemoteWebsocket(object):
 
     @LogIt
     def __init__(self, config):
-        if sys.platform.startswith('win'):
-            path = os.path.join(os.path.expandvars('%appdata%'), 'samsungctl')
-        else:
-            path = os.path.join(os.path.expanduser('~'), '.samsungctl')
-
-        if not os.path.exists(path):
-            os.mkdir(path)
-
-        token_file = os.path.join(path, "token.txt")
-
-        if not os.path.exists(token_file):
-            with open(token_file, 'w') as f:
-                f.write('')
-
-        self.token_file = token_file
-
         self.config = config
-
         self._loop_event = threading.Event()
         self.receive_lock = threading.Lock()
         self._power_event = threading.Event()
@@ -53,12 +34,13 @@ class RemoteWebsocket(object):
         self._mac_address = None
         self.sock = None
         self._running = False
+        self.send_event = threading.Event()
 
     @property
     @LogItWithReturn
     def mac_address(self):
         if self._mac_address is None:
-            _mac_address = wake_on_lan.get_mac_address(self.config['host'])
+            _mac_address = wake_on_lan.get_mac_address(self.config.host)
             if _mac_address is None:
                 _mac_address = ''
 
@@ -150,49 +132,35 @@ class RemoteWebsocket(object):
     @LogIt
     def open(self):
         with self.receive_lock:
-            token = ''
-            all_tokens = []
-
-            with open(self.token_file, 'r') as f:
-                tokens = f.read()
-
-            for line in tokens.split('\n'):
-                if not line.strip():
-                    continue
-                if line.startswith(self.config["host"] + ':'):
-                    token = line
-                else:
-                    all_tokens += [line]
-
-            if token:
-                all_tokens += [token]
-                token = token.replace(self.config["host"] + ':', '')
-                logger.debug('using saved token: ' + token)
-                token = "&token=" + token
-
-            if all_tokens:
-                with open(self.token_file, 'w') as f:
-                    f.write('\n'.join(all_tokens) + '\n')
-
             if self.sock is not None:
                 self.close()
 
-            if self.config['port'] == 8002:
-                self.config['port'] = 8002
+            if self.config.token:
+                self.config.port = 8002
+                logger.debug('using saved token: ' + self.config.token)
+
                 sslopt = {"cert_reqs": ssl.CERT_NONE}
                 url = SSL_URL_FORMAT.format(
-                    self.config["host"],
-                    self.config["port"],
-                    self._serialize_string(self.config["name"])
-                ) + token
+                    self.config.host,
+                    self.config.port,
+                    self._serialize_string(self.config.name)
+                ) + "&token=" + self.config.token
+            elif self.config.port == 8002:
+                self.config.token = ''
+                sslopt = {"cert_reqs": ssl.CERT_NONE}
+                url = SSL_URL_FORMAT.format(
+                    self.config.host,
+                    self.config.port,
+                    self._serialize_string(self.config.name)
+                )
 
             else:
-                self.config['port'] = 8001
+                self.config.port = 8001
                 sslopt = {}
                 url = URL_FORMAT.format(
-                    self.config["host"],
-                    self.config["port"],
-                    self._serialize_string(self.config["name"])
+                    self.config.host,
+                    self.config.port,
+                    self._serialize_string(self.config.name)
                 )
 
             try:
@@ -211,11 +179,11 @@ class RemoteWebsocket(object):
                     'ms.channel.connect'
                 )
 
-                if self.config['port'] == 8001:
+                if self.config.port == 8001:
                     logger.debug(
                         "Websocket connection failed. Trying ssl connection"
                     )
-                    self.config['port'] = 8002
+                    self.config.port = 8002
                     self.open()
                 else:
                     self.close()
@@ -223,20 +191,8 @@ class RemoteWebsocket(object):
 
             def auth_callback(data):
                 if 'data' in data and 'token' in data["data"]:
-                    with open(self.token_file, "r") as token_file:
-                        token_data = token_file.read().split('\n')
-
-                    for lne in token_data[:]:
-                        if line.startswith(self.config['host'] + ':'):
-                            token_data.remove(lne)
-
-                    token_data += [
-                        self.config['host'] + ':' + data['data']["token"]
-                    ]
-
-                    logger.debug('new token: ' + token_data[-1])
-                    with open(self.token_file, "w") as token_file:
-                        token_file.write('\n'.join(token_data) + '\n')
+                    self.config.token = data['data']["token"]
+                    logger.debug('new token: ' + self.config.token)
 
                 logger.debug("Access granted.")
                 auth_event.set()
@@ -286,14 +242,23 @@ class RemoteWebsocket(object):
     @LogIt
     def send(self, method, **params):
         if self.sock is None:
-            logger.info('Is the TV on???')
-            return
+            if method != 'ms.remote.control':
+                if not self._running:
+                    try:
+                        self.open()
+                    except RuntimeError:
+                        logger.info('Is the TV on???')
+                        return
+            else:
+                logger.info('Is the TV on???')
+                return
 
         payload = dict(
             method=method,
             params=params
         )
         self.sock.send(json.dumps(payload))
+        self.send_event.wait(0.2)
 
     @LogIt
     def control(self, key, cmd='Click'):
@@ -327,7 +292,6 @@ class RemoteWebsocket(object):
             return
 
         with self.receive_lock:
-            event = threading.Event()
             params = dict(
                 Cmd=cmd,
                 DataOfCmd=key,
@@ -337,7 +301,6 @@ class RemoteWebsocket(object):
 
             logger.info("Sending control command: " + str(params))
             self.send("ms.remote.control", **params)
-            event.wait(0.15)
 
     _key_interval = 0.5
 
@@ -382,7 +345,6 @@ class RemoteWebsocket(object):
         )
 
         for event in ['ed.edenApp.get', 'ed.installedApp.get']:
-
             params = dict(
                 data='',
                 event=event,
@@ -391,24 +353,25 @@ class RemoteWebsocket(object):
 
             self.send('ms.channel.emit', **params)
 
-        eden_event.wait(2.0)
-        installed_event.wait(2.0)
+        eden_event.wait(10.0)
+        installed_event.wait(10.0)
+
+        self.unregister_receive_callback(
+            eden_app_get,
+            'event',
+            'ed.edenApp.get'
+        )
+
+        self.unregister_receive_callback(
+            installed_app_get,
+            'data',
+            None
+        )
 
         if not eden_event.isSet():
-
-            self.unregister_receive_callback(
-                eden_app_get,
-                'event',
-                'ed.edenApp.get'
-            )
             logger.debug('ed.edenApp.get timed out')
 
         if not installed_event.isSet():
-            self.unregister_receive_callback(
-                installed_app_get,
-                'data',
-                None
-            )
             logger.debug('ed.installedApp.get timed out')
 
         if eden_data and installed_data:
@@ -480,12 +443,13 @@ class RemoteWebsocket(object):
             self.send("ms.remote.control", **params)
 
             event.wait(2.0)
+            self.unregister_receive_callback(
+                voice_callback,
+                'event',
+                'ms.voiceApp.standby'
+            )
+
             if not event.isSet():
-                self.unregister_receive_callback(
-                    voice_callback,
-                    'event',
-                    'ms.voiceApp.standby'
-                )
                 logger.debug('ms.voiceApp.standby timed out')
 
     @LogIt
@@ -515,12 +479,12 @@ class RemoteWebsocket(object):
             self.send("ms.remote.control", **params)
 
             event.wait(2.0)
+            self.unregister_receive_callback(
+                voice_callback,
+                'event',
+                'ms.voiceApp.hide'
+            )
             if not event.isSet():
-                self.unregister_receive_callback(
-                    voice_callback,
-                    'event',
-                    'ms.voiceApp.hide'
-                )
                 logger.debug('ms.voiceApp.hide timed out')
 
     @staticmethod
@@ -669,5 +633,23 @@ class Mouse(object):
                 self._ime_start_event.wait(len(self._commands))
                 self._ime_update_event.wait(len(self._commands))
                 self._touch_enable_event.wait(len(self._commands))
+
+                self._remote.unregister_receive_callback(
+                    imeStart,
+                    'event',
+                    'ms.remote.imeStart'
+                )
+
+                self._remote.unregister_receive_callback(
+                    imeUpdate,
+                    'event',
+                    'ms.remote.imeUpdate'
+                )
+
+                self._remote.unregister_receive_callback(
+                    touchEnable,
+                    'event',
+                    'ms.remote.touchEnable'
+                )
 
                 self._is_running = False

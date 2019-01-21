@@ -17,6 +17,7 @@ try:
     from . import exceptions
     from . import Remote
     from . import key_mappings
+    from .config import Config
 
 except ValueError:
     import sys
@@ -34,6 +35,7 @@ except ValueError:
     from samsungctl import exceptions
     from samsungctl import Remote
     from samsungctl import key_mappings
+    from samsungctl.config import Config
 
 
 def _read_config():
@@ -238,8 +240,11 @@ def main():
         logging.error("Error: --host must be set")
         return
 
+    config = Config(**config)
+    config.log_level = log_level
+
     try:
-        with Remote(config, log_level) as remote:
+        with Remote(config) as remote:
             if args.interactive:
                 logging.getLogger().setLevel(logging.ERROR)
                 from . import interactive
