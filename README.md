@@ -1,6 +1,9 @@
 
 **SAMSUNGCTL**
 ==========
+BIG NEWS!!!!
+samsungctl now supports the ever elusive H and J model year (2014 and 2015) TV's
+
 
 OK so first thing is first.
 I want to give a special thanks to the people that helped in the bug testing
@@ -118,8 +121,9 @@ arguments:
 ```
 usage: samsungctl [-h] [--version] [-v] [-q] [-i] [--host HOST] [--port PORT]
                   [--method METHOD] [--name NAME] [--description DESC]
-                  [--id ID] [--timeout TIMEOUT] [--start-app APP NAME OR ID]
-                  [--app-metadata METADATA] [--key-help]
+                  [--id ID] [--token TOKEN] [--timeout TIMEOUT]
+                  [--start-app APP NAME OR ID] [--app-metadata METADATA]
+                  [--key-help]
                   [key [key ...]]
 
 Remote control Samsung televisions via TCP/IP connection
@@ -142,8 +146,9 @@ optional argument|description
 --name NAME|remote control name
 --description DESC|remote control description
 --id ID|remote control id
+--token TOKEN|Authentication token that is used by 2014-2015 TVs and some 2016-current TVs
 --timeout TIMEOUT|socket timeout in seconds \(0 = no timeout\)
---start-app APPPLICATION NAME OR ID|starts an application
+--start-app APPLICATION NAME OR ID|starts an application
 --app-metadata METADATA|string of information the application can use
 when it starts up.
 And example would be the browser.
@@ -196,6 +201,8 @@ constructed using the `with` statement:
         # Use the remote object
 ```
 
+
+***Depreciated***
 The constructor takes a configuration dictionary as a parameter. All
 configuration items must be specified.
 
@@ -208,14 +215,143 @@ method|string|Connection method \(`legacy` or `websocket`\)
 name|string|Name of the remote controller.
 description|string|Remote controller description.
 id|string|Additional remote controller ID.
+token|string|Authentication token
 timeout|int|Timeout in seconds. `0` means no timeout.
 
 
-The `Remote` object is very simple and you only need the `control(key)`
-method. The only parameter is a string naming the key to be sent (e.g.
-`KEY_VOLDOWN`). See `Key codes`_. You can call `control` multiple times
-using the same `Remote` object. The connection is automatically closed when
-exiting the `with` statement.
+I have put into place a class that handlees all of thee configuration
+information. It makes it easier for saving and loading confiig data.
+
+```python
+import samsungctl
+
+
+config = samsungctl.Config(
+    name='samsungctl',
+    description='samsungctl-library',
+    method='websocket',
+    port=8001
+)
+```
+
+The constrictor for the Config class takes these parameters
+
+Param Name|Default value|Use
+----------|-------------|---
+name|None|Name of the "remote" this is the name that is going to appear on the TV
+description|None|Only used ini the legacy connection (pre 2014  TVs)
+host|None|The ip address of the TV
+port|None|The port to connect to. choices aree 55000 (< 2014), 8080 (2014 & 2015), 8001 & 8002 (>= 2016
+method|None|The connection method. legacy, websocket or encrypted
+id|None|This is an identifier that you can ste. when using the "encrypted" method this should be left out
+timeout|0|socket timeout, only used for thee legacy method
+token|None|Authentication tokeen that is used for 2014 & 2015 and somee 2016+ TV's
+device_id|None|Internal Use
+upnp_locations|None|Future Use
+
+
+the Config class is also where you set your logging level
+
+```python
+import logging
+import samsungctl
+
+
+config = samsungctl.Config(
+    name='samsungctl',
+    description='samsungctl-library',
+    method='websocket',
+    port=8001
+)
+
+config.log_level = logging.DEBUG
+```
+
+There are 2 nice convenience methods for saving and loading a config file.
+
+```python
+import samsungctl
+
+config = samsungctl.Config.load('path/to/save/file')
+```
+
+If you load a file the path is saved so you can simply call save to
+save any new data. If you constructed the Config class manually you will
+need to pass a path when calling save. and that path is then saved so
+any subsequent calls to save will not require you to pass thee path
+
+```python
+import samsungctl
+
+
+config = samsungctl.Config(
+    name='samsungctl',
+    description='samsungctl-library',
+    method='websocket',
+    port=8001
+)
+
+config.save('path/to/save/file')
+```
+
+when calling save if you pass only a folder path and not a folder/file path
+the name you passed to the constructor will be useed along with the
+extension ".config"
+
+You do not need to keep track of the config instance. once it is passed
+to the Remote constructor it is then stored in that instance.
+
+```python
+import samsungctl
+
+
+config = samsungctl.Config.load('path/to/save/file')
+remote = samsungctl.Remote(config)
+remote.config.save()
+```
+
+You are still able to pass a dictionary to the Remote constructor as well.
+
+The Remote object has changed a little. Nothing API breaking.
+again more convenience methods/properties.
+
+You are able to specify any key to send like it is a method of the
+Remote instance
+
+ ```python
+import samsungctl
+
+
+config = samsungctl.Config.load('path/to/save/file')
+remote = samsungctl.Remote(config)
+remote.KEY_VOLUP()
+remote.KEY_VOLDOWN()
+
+```
+
+I also added power status along with powering off and on 2014+ TV's
+
+
+```python
+import samsungctl
+
+
+config = samsungctl.Config.load('path/to/save/file')
+remote = samsungctl.Remote(config)
+print(remote.power)
+
+# turns the TV on
+remote.power = True
+
+print(remote.power)
+# turns the TV off
+remote.power = False
+
+# toggles the power
+remote.power = not remote.power
+```
+
+We do not have the ability to turn on the TV's older then 2014.
 
 When something goes wrong you will receive an exception:
 
