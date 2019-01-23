@@ -1,29 +1,19 @@
 # -*- coding: utf-8 -*-
-
-import requests
-from lxml import etree
 try:
-    from .xmlns import strip_xmlns
     from .icon import Icon
     from .service import Service
 except ImportError:
-    from xmlns import strip_xmlns
     from icon import Icon
     from service import Service
 
 
 class EmbeddedDevice(object):
 
-    def __init__(self, url, location=None, node=None, parent=None):
+    def __init__(self, url, node=None, parent=None, dump=''):
         self.__parent = parent
         self.__services = {}
         self.__devices = {}
         self.__icons = {}
-        if node is None:
-            response = requests.get(url + location.replace(url, ''))
-            root = etree.fromstring(response.content)
-            root = strip_xmlns(root)
-            node = root.find('device')
 
         icons = node.find('iconList')
         if icons is None:
@@ -46,21 +36,28 @@ class EmbeddedDevice(object):
             control_url = service.find('controlURL').text.replace(url, '')
             service_id = service.find('serviceId').text
             service_type = service.find('serviceType').text
-            if location is not None:
-                scpdurl = (
-                    '/' +
-                    location[1:].split('/')[0] +
-                    '/' +
-                    scpdurl
-                )
 
-            service = Service(self, url, scpdurl, service_type, control_url)
+            service = Service(
+                self,
+                url,
+                scpdurl,
+                service_type,
+                control_url,
+                dump=dump
+            )
+
             name = service_id.split(':')[-1]
             service.__name__ = name
             self.__services[name] = service
 
         for device in devices:
-            device = EmbeddedDevice(url, node=device, parent=self)
+            device = EmbeddedDevice(
+                url,
+                node=device,
+                parent=self,
+                dump=dump
+            )
+
             self.__devices[device.__name__] = device
 
         self.url = url
@@ -127,7 +124,7 @@ class EmbeddedDevice(object):
         if item in self.__dict__:
             return self.__dict__[item]
 
-        if self.__noe is not None:
+        if self.__node is not None:
             if item in self.__services:
                 return self.__services[item]
             if item in self.__devices:

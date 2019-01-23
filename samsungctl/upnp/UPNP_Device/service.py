@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function
 import requests
+import os
 from lxml import etree
 try:
     from .data_type import StateVariable
@@ -23,8 +24,10 @@ class Service(object):
         location,
         service,
         control_url,
-        node=None
+        node=None,
+        dump=''
     ):
+
         self.__parent = parent
         self.state_variables = {}
         self.__actions = {}
@@ -45,8 +48,27 @@ class Service(object):
         self.service = service
 
         location = location.replace('//', '/')
-
         response = requests.get(url + location)
+        if dump:
+            path = location
+            if path.startswith('/'):
+                path = path[1:]
+            if '/' in path:
+                path, file_name = path.rsplit('/', 1)
+                path = os.path.join(dump, path)
+            else:
+                file_name = path
+                path = dump
+
+            if not os.path.exists(path):
+                os.makedirs(path)
+
+            if not file_name.endswith('.xml'):
+                file_name += '.xml'
+
+            with open(os.path.join(path, file_name), 'w') as f:
+                f.write(response.content)
+
         try:
             root = etree.fromstring(response.content)
         except:
