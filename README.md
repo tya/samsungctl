@@ -311,23 +311,11 @@ remote.config.save()
 
 You are still able to pass a dictionary to the Remote constructor as well.
 
-The Remote object has changed a little. Nothing API breaking.
-again more convenience methods/properties.
+The only parameters you MUST supply is the method and the host. everything else
+has a default value associated with it.
 
-You are able to specify any key to send like it is a method of the
-Remote instance
-
- ```python
-import samsungctl
-
-
-config = samsungctl.Config.load('path/to/save/file')
-remote = samsungctl.Remote(config)
-remote.KEY_VOLUP()
-remote.KEY_VOLDOWN()
-
-```
-
+<br></br>
+***Power Property***
 I also added power status along with powering off and on 2014+ TV's
 
 
@@ -352,14 +340,25 @@ remote.power = not remote.power
 
 We do not have the ability to turn on the TV's older then 2014.
 
+<br></br>
+***Exceptions***
 When something goes wrong you will receive an exception:
 
 Exception|Description
 ---------|-----------
-AccessDenied|The TV does not allow you to send keys.
-ConnectionClosed|The connection was closed.
-UnhandledResponse|An unexpected response was received.
-socket.timeout|The connection timed out.
+SamsungTVError|Samsung TV Exception Base Class.
+AccessDenied|Connection was denied.
+ConnectionClosed|Connection was closed.
+UnhandledResponse|Received unknown response.
+NoTVFound|Unable to locate a TV.
+ConfigError|Base class for config exceptions.
+ConfigUnknownMethod|Unknown connection method.
+ConfigParseError|Config data is not json formatted or is not a formatted flat file.
+ConfigLoadError|Config path specified cannot be located.
+ConfigSavePathError|Config save path is not valid.
+ConfigSaveError|Error saving config.
+ConfigSavePathNotSpecified|Config save path was not specified.
+ConfigParameterError|Parameter is not a config parameter.
 
 <br></br>
 ***Example program***
