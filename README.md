@@ -134,7 +134,7 @@ positional arguments:
 
 
 optional argument|description
--- | --
+-----------------|-----------
 -h, --help|show this help message and exit
 --version|show program's version number and exit
 -v, --verbose|increase output verbosity
@@ -147,15 +147,9 @@ optional argument|description
 --description DESC|remote control description
 --id ID|remote control id
 --token TOKEN|Authentication token that is used by 2014-2015 TVs and some 2016-current TVs
---timeout TIMEOUT|socket timeout in seconds \(0 = no timeout\)
+--timeout TIMEOUT|socket timeout in seconds (0 = no timeout)
 --start-app APPLICATION NAME OR ID|starts an application
---app-metadata METADATA|string of information the application can use
-when it starts up.
-And example would be the browser.
-To have it open directly to a specific URL you would enter: "
-"http\/\/www.some-web-address.com"
-wrapping the meta data in quotes will reduce the possibility of a
-command line parser error.
+--app-metadata METADATA|string of information the application can use when it starts up. And example would be the browser. To have it open directly to a specific URL you would enter: `"http\/\/www.some-web-address.com"` wrapping the meta data in quotes will reduce the possibility of a command line parser error.
 --key-help {OPTIONAL KEYS}|prints out key help
 
 ```
@@ -239,13 +233,13 @@ The constrictor for the Config class takes these parameters
 Param Name|Default value|Use
 ----------|-------------|---
 name|None|Name of the "remote" this is the name that is going to appear on the TV
-description|None|Only used ini the legacy connection (pre 2014  TVs)
+description|None|Only used in the legacy connection (pre 2014  TVs)
 host|None|The ip address of the TV
-port|None|The port to connect to. choices aree 55000 (< 2014), 8080 (2014 & 2015), 8001 & 8002 (>= 2016
+port|None|The port to connect to. choices aree 55000 (< 2014), 8080 (2014 & 2015), 8001 & 8002 (>= 2016)
 method|None|The connection method. legacy, websocket or encrypted
-id|None|This is an identifier that you can ste. when using the "encrypted" method this should be left out
-timeout|0|socket timeout, only used for thee legacy method
-token|None|Authentication tokeen that is used for 2014 & 2015 and somee 2016+ TV's
+id|None|This is an identifier that you can set. when using the "encrypted" method this should be left out
+timeout|0|socket timeout, only used for the legacy method
+token|None|Authentication token that is used for 2014 & 2015 and some 2016+ TV's
 device_id|None|Internal Use
 upnp_locations|None|Future Use
 
