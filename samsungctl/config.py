@@ -40,7 +40,8 @@ class Config(object):
         timeout=0,
         token=None,
         device_id=None,
-        upnp_locations=None
+        upnp_locations=None,
+        **_
     ):
         if name is None:
             name = 'samsungctl'
