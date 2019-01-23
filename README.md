@@ -259,9 +259,8 @@ import samsungctl
 
 config = samsungctl.Config(
     name='samsungctl',
-    description='samsungctl-library',
     method='websocket',
-    port=8001
+    host='192.168.1.100'
 )
 
 config.log_level = logging.DEBUG
@@ -288,7 +287,7 @@ config = samsungctl.Config(
     name='samsungctl',
     description='samsungctl-library',
     method='websocket',
-    port=8001
+    host='192.168.1.100'
 )
 
 config.save('path/to/save/file')
@@ -374,11 +373,8 @@ import time
 
 config = samsungctl.Config(
     name='samsungctl',
-    description='samsungctl-library',
     method='legacy',
-    port=55000,
-	host='192.168.0.10',
-	timeout=0
+    host='192.168.1.100'
 )
 
 with samsungctl.Remote(config) as remote:
@@ -402,11 +398,8 @@ import samsungctl
 
 config = samsungctl.Config(
     name='samsungctl',
-    description='samsungctl-library',
     method='websocket',
-    port=8002,
-	host='192.168.0.10',
-	timeout=0
+    host='192.168.1.100'
 )
 
 with samsungctl.Remote(config) as remote:
@@ -445,11 +438,8 @@ import time
 
 config = samsungctl.Config(
     name='samsungctl',
-    description='samsungctl-library',
     method='websocket',
-    port=8002,
-	host='192.168.0.10',
-	timeout=0
+    host='192.168.1.100'
 )
 
 with samsungctl.Remote(config) as remote:
@@ -490,11 +480,8 @@ import time
 
 config = samsungctl.Config(
     name='samsungctl',
-    description='samsungctl-library',
     method='websocket',
-    port=8002,
-	host='192.168.0.10',
-	timeout=0
+    host='192.168.1.100'
 )
 
 with samsungctl.Remote(config) as remote:
@@ -517,11 +504,8 @@ import samsungctl
 
 config = samsungctl.Config(
     name='samsungctl',
-    description='samsungctl-library',
     method='websocket',
-    port=8002,
-	host='192.168.0.10',
-	timeout=0
+    host='192.168.1.100'
 )
 
 with samsungctl.Remote(config) as remote:
@@ -541,11 +525,8 @@ import samsungctl
 
 config = samsungctl.Config(
     name='samsungctl',
-    description='samsungctl-library',
     method='websocket',
-    port=8002,
-	host='192.168.0.10',
-	timeout=0
+    host='192.168.1.100'
 )
 
 with samsungctl.Remote(config) as remote:
@@ -588,11 +569,8 @@ import samsungctl
 
 config = samsungctl.Config(
     name='samsungctl',
-    description='samsungctl-library',
     method='websocket',
-    port=8002,
-	host='192.168.0.10',
-	timeout=0
+    host='192.168.1.100'
 )
 
 with samsungctl.Remote(config) as remote:
@@ -1036,6 +1014,41 @@ KEY_EXT41|
 
 Please note that some codes are different on the 2016+ TVs. For example,
 `KEY_POWEROFF` is `KEY_POWER` on the newer TVs.
+
+I also added all of th keys as methods. so you havee the choice of using
+the method for sending a key
+
+```python
+import samsungctl
+
+config = samsungctl.Config(
+    name='samsungctl',
+    method='websocket',
+    host='192.168.1.100'
+)
+
+with samsungctl.Remote(config) as remote:
+    remote.command("KEY_VOLUP")
+
+```
+
+or you can also use this
+
+```python
+import samsungctl
+
+config = samsungctl.Config(
+    name='samsungctl',
+    method='websocket',
+    host='192.168.1.100'
+)
+
+with samsungctl.Remote(config) as remote:
+    remote.KEY_VOLUP()
+
+```
+
+
 
 <br></br>
 ***References***
