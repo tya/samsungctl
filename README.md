@@ -196,6 +196,10 @@ constructed using the `with` statement:
 ```
 
 
+<br></br>
+***Config Class***
+__________________
+
 ***Depreciated***
 The constructor takes a configuration dictionary as a parameter. All
 configuration items must be specified.
@@ -310,6 +314,8 @@ has a default value associated with it.
 
 <br></br>
 ***Power Property***
+____________________
+
 I also added power status along with powering off and on 2014+ TV's
 
 
@@ -336,6 +342,8 @@ We do not have the ability to turn on the TV's older then 2014.
 
 <br></br>
 ***Exceptions***
+________________
+
 When something goes wrong you will receive an exception:
 
 Exception|Description
@@ -356,7 +364,7 @@ ConfigParameterError|Parameter is not a config parameter.
 
 <br></br>
 ***Example program***
----------------------
+_____________________
 
 This simple program opens and closes the menu a few times.
 
@@ -377,7 +385,7 @@ with samsungctl.Remote(config) as remote:
 ```
 <br></br>
 ***Mouse Control***
----------------------
+___________________
 
 Mouse control can only be done by using samsungctl as a python module.
 Mouse command are built. this way you can accomplish multiple movements
@@ -458,7 +466,7 @@ with samsungctl.Remote(config) as remote:
 ```
 <br></br>
 ***Voice Recognition***
----------------------
+_______________________
 
 If you TV supports voice recognition you have the ability to start and
 stop the voice recognition service on the TV. this can be done only by
@@ -485,7 +493,7 @@ with samsungctl.Remote(config) as remote:
 
 <br></br>
 ***Applications***
----------------------
+__________________
 
 This is going to be a wee bit long winded. But here goes
 <br></br>
@@ -1054,3 +1062,4 @@ the only implementation. Here is the list of things that inspired samsungctl.
 - https://gist.github.com/danielfaust/998441
 - https://github.com/Bntdumas/SamsungIPRemote
 - https://github.com/kyleaa/homebridge-samsungtv2016
+- https://github.com/eclair4151/SmartCrypto
