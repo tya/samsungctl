@@ -122,6 +122,7 @@ arguments:
 usage: samsungctl [-h] [--version] [-v] [-q] [-i] [--host HOST] [--port PORT]
                   [--method METHOD] [--name NAME] [--description DESC]
                   [--id ID] [--token TOKEN] [--timeout TIMEOUT]
+                  [--config-file PATH/FILENAME]
                   [--start-app APP NAME OR ID] [--app-metadata METADATA]
                   [--key-help]
                   [key [key ...]]
@@ -148,6 +149,7 @@ optional argument|description
 --id ID|remote control id
 --token TOKEN|Authentication token that is used by 2014-2015 TVs and some 2016-current TVs
 --timeout TIMEOUT|socket timeout in seconds (0 = no timeout)
+--config-file PATH/FILENAME|path and filename to configuration file *see below for mor information
 --start-app APPLICATION NAME OR ID|starts an application
 --app-metadata METADATA|string of information the application can use when it starts up. And example would be the browser. To have it open directly to a specific URL you would enter: `"http\/\/www.some-web-address.com"` wrapping the meta data in quotes will reduce the possibility of a command line parser error.
 --key-help {OPTIONAL KEYS}|prints out key help
@@ -176,6 +178,18 @@ in this order. A simple default configuration is
 bundled with the source as
 
 * `samsungctl.conf <samsungctl.conf>`
+
+***--config-file***
+___________________
+This is how the --config-file parameter works. If this is the first time
+you are using this library on a TV you must specify --method and --host
+and key code for the command you wish to execute along with this parameter.
+By doing this is will make all of the necessary config file settings that
+are needed to be made for your TV. After the library has sent the command
+to your TV it will then save the file. Any calls there after will only
+need to have --config-file PATH/FILENAME along with the command you
+wish to perform for a command line options.
+All other information will be retrieved from the file.
 
 
 <br></br>

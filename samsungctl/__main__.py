@@ -196,6 +196,12 @@ def main():
         help="socket timeout in seconds (0 = no timeout)"
     )
     parser.add_argument(
+        "--config-file",
+        type=str,
+        default=None,
+        help="configuration file to load and/or save to"
+    )
+    parser.add_argument(
         "--start-app",
         help="start an application --start-app \"Netflix\""
     )
@@ -237,14 +243,33 @@ def main():
     if args.key_help:
         keys_help(args.key)
 
-    config = _read_config()
-    config.update({k: v for k, v in vars(args).items() if v is not None})
+    if args.config_file is None:
+        config = _read_config()
+        config.update(
+            {
+                k: v for k, v in vars(args).items()
+                if v is not None
+            }
+        )
+        config = Config(**config)
+    else:
+        if os.path.isfile(args.config_file):
+            config = Config.load(args.config_file)
+        else:
+            config = _read_config()
+            config.update(
+                {
+                    k: v for k, v in vars(args).items()
+                    if v is not None
+                }
+            )
+            config = Config(**config)
+            config.path = args.config_file
 
-    if not config["host"]:
+    if not config.host:
         logging.error("Error: --host must be set")
         return
 
-    config = Config(**config)
     config.log_level = log_level
     try:
         with Remote(config) as remote:
@@ -276,6 +301,9 @@ def main():
         logging.error("Error: Timed out!")
     except OSError as e:
         logging.error("Error: %s", e.strerror)
+
+    if args.config_file:
+        config.save()
 
 
 if __name__ == "__main__":
