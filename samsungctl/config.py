@@ -173,7 +173,7 @@ class Config(object):
             path = os.path.join(path, self.name + '.config')
 
         if os.path.exists(path):
-            with open(path, 'w') as f:
+            with open(path, 'r') as f:
                 data = f.read().split('\n')
         else:
             data = []
