@@ -372,15 +372,14 @@ This simple program opens and closes the menu a few times.
 import samsungctl
 import time
 
-config = {
-    "name": "samsungctl",
-    "description": "PC",
-    "id": "",
-    "host": "192.168.0.10",
-    "port": 55000,
-    "method": "legacy",
-    "timeout": 0,
-}
+config = samsungctl.Config(
+    name='samsungctl',
+    description='samsungctl-library',
+    method='legacy',
+    port=55000,
+	host='192.168.0.10',
+	timeout=0
+)
 
 with samsungctl.Remote(config) as remote:
     for i in range(10):
@@ -401,15 +400,14 @@ each movement.
 ```python
 import samsungctl
 
-config = {
-    "name": "samsungctl",
-    "description": "PC",
-    "id": "",
-    "host": "192.168.0.10",
-    "port": 8002,
-    "method": "websocket",
-    "timeout": 0,
-}
+config = samsungctl.Config(
+    name='samsungctl',
+    description='samsungctl-library',
+    method='websocket',
+    port=8002,
+	host='192.168.0.10',
+	timeout=0
+)
 
 with samsungctl.Remote(config) as remote:
     mouse = remote.mouse
@@ -445,15 +443,14 @@ import samsungctl
 import time
 
 
-config = {
-    "name": "samsungctl",
-    "description": "PC",
-    "id": "",
-    "host": "192.168.0.10",
-    "port": 8002,
-    "method": "websocket",
-    "timeout": 0,
-}
+config = samsungctl.Config(
+    name='samsungctl',
+    description='samsungctl-library',
+    method='websocket',
+    port=8002,
+	host='192.168.0.10',
+	timeout=0
+)
 
 with samsungctl.Remote(config) as remote:
      mouse = remote.mouse
@@ -491,15 +488,14 @@ example code of how to do this is below.
 import samsungctl
 import time
 
-config = {
-    "name": "samsungctl",
-    "description": "PC",
-    "id": "",
-    "host": "192.168.0.10",
-    "port": 8002,
-    "method": "websocket",
-    "timeout": 0,
-}
+config = samsungctl.Config(
+    name='samsungctl',
+    description='samsungctl-library',
+    method='websocket',
+    port=8002,
+	host='192.168.0.10',
+	timeout=0
+)
 
 with samsungctl.Remote(config) as remote:
     remote.start_voice_recognition()
@@ -519,15 +515,14 @@ below is a sample of how to access the applications on the TV
 ```python
 import samsungctl
 
-config = {
-    "name": "samsungctl",
-    "description": "PC",
-    "id": "",
-    "host": "192.168.0.10",
-    "port": 8002,
-    "method": "websocket",
-    "timeout": 0,
-}
+config = samsungctl.Config(
+    name='samsungctl',
+    description='samsungctl-library',
+    method='websocket',
+    port=8002,
+	host='192.168.0.10',
+	timeout=0
+)
 
 with samsungctl.Remote(config) as remote:
     for app in remote.applications:
@@ -544,15 +539,14 @@ if you want to access a specific application by name or by the app id
 ```python
 import samsungctl
 
-config = {
-    "name": "samsungctl",
-    "description": "PC",
-    "id": "",
-    "host": "192.168.0.10",
-    "port": 8002,
-    "method": "websocket",
-    "timeout": 0,
-}
+config = samsungctl.Config(
+    name='samsungctl',
+    description='samsungctl-library',
+    method='websocket',
+    port=8002,
+	host='192.168.0.10',
+	timeout=0
+)
 
 with samsungctl.Remote(config) as remote:
     app = remote.get_application('YouTube')
@@ -592,15 +586,14 @@ the available content in that group
 ```python
 import samsungctl
 
-config = {
-    "name": "samsungctl",
-    "description": "PC",
-    "id": "",
-    "host": "192.168.0.10",
-    "port": 8002,
-    "method": "websocket",
-    "timeout": 0,
-}
+config = samsungctl.Config(
+    name='samsungctl',
+    description='samsungctl-library',
+    method='websocket',
+    port=8002,
+	host='192.168.0.10',
+	timeout=0
+)
 
 with samsungctl.Remote(config) as remote:
     for app in remote.applications:

@@ -65,7 +65,7 @@ class Application(object):
     @LogItWithReturn
     def version(self):
         url = 'http://{0}:8001/api/v2/applications/{1}'.format(
-            self._remote.config['host'],
+            self._remote.config.host,
             self.app_id
         )
 
@@ -84,7 +84,7 @@ class Application(object):
     @LogItWithReturn
     def is_visible(self):
         url = 'http://{0}:8001/api/v2/applications/{1}'.format(
-            self._remote.config['host'],
+            self._remote.config.host,
             self.app_id
         )
 
@@ -103,7 +103,7 @@ class Application(object):
     @LogItWithReturn
     def is_running(self):
         url = 'http://{0}:8001/api/v2/applications/{1}'.format(
-            self._remote.config['host'],
+            self._remote.config.host,
             self.app_id
         )
 
