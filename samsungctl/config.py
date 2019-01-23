@@ -11,13 +11,16 @@ logger = logging.getLogger('samsungctl')
 
 
 DEFAULT_CONFIG = dict(
-    name=None,
-    description=None,
+    name='samsungctl',
+    description=socket.gethostname(),
     host=None,
     port=None,
     id=None,
     method=None,
-    timeout=None
+    timeout=0,
+    token=None,
+    device_id=None,
+    upnp_locations=None,
 )
 
 
@@ -129,20 +132,31 @@ class Config(object):
                             continue
 
                         try:
-                            key, value = line.split('=')
+                            key, value = line.split('=', 1)
                         except ValueError:
-                            raise exceptions.ConfigParseError
+                            if line.count('=') == 1:
+                                key = line.replace('=', '')
+                                value = ''
+                            else:
+                                continue
 
                         key = key.lower().strip()
+
+                        if key not in config:
+                            continue
+
                         value = value.strip()
 
-                        if key != 'token' and key not in config:
-                            raise exceptions.ConfigParameterError(key)
+                        if value.lower() in ('none', 'null'):
+                            value = None
+                        elif not value:
+                            value = None
 
-                        try:
-                            value = int(value)
-                        except ValueError:
-                            continue
+                        elif key in ('port', 'timeout'):
+                            try:
+                                value = int(value)
+                            except ValueError:
+                                raise exceptions.ConfigParameterError(key)
 
                         config[key] = value
 
@@ -183,7 +197,7 @@ class Config(object):
         for new_line in new:
             key = new_line.split('=')[0]
             for i, old_line in enumerate(data):
-                if old_line.startswith(key):
+                if old_line.lower().strip().startswith(key):
                     data[i] = new_line
                     break
             else:
