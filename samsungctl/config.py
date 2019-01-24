@@ -159,11 +159,10 @@ class Config(object):
                                 raise exceptions.ConfigParameterError(key)
 
                         config[key] = value
-
         else:
             raise exceptions.ConfigLoadError
 
-        self = cls.__new__(**config)
+        self = super(Config, cls).__new__(cls, **config)
         self.path = path
 
     def save(self, path=None):
