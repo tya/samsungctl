@@ -163,7 +163,9 @@ class Config(object):
             raise exceptions.ConfigLoadError
 
         self = super(Config, cls).__new__(cls, **config)
+        self.__init__(**config)
         self.path = path
+        return self
 
     def save(self, path=None):
         if path is None:
